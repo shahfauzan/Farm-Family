@@ -1,0 +1,27 @@
+project_id = "farm-family"
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["farmfamily://auth-callback"]
+enable_signup = true
+
+[auth.email]
+enabled = true
+double_confirm_changes = true
+enable_confirmations = true
+
+[functions.ai-assistant]
+verify_jwt = true
+
+[functions.accept-invitation]
+verify_jwt = true
+
+[functions.family-backups]
+verify_jwt = true
+
+[functions.family-imports]
+verify_jwt = true
+
+[functions.farm-weather]
+verify_jwt = true

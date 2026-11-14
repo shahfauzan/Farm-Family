@@ -1,0 +1,125 @@
+name: Production release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version for the release (for example v1.2.3)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Validate and deploy production
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: write
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - name: Check out exact release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Validate release version
+        id: version
+        env:
+          RELEASE_VERSION: ${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref_name }}
+        shell: bash
+        run: |
+          if [[ ! "$RELEASE_VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+            echo "::error::Release version must use semantic version format vMAJOR.MINOR.PATCH."
+            exit 1
+          fi
+          echo "value=$RELEASE_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install backend tools
+        run: npm ci
+
+      - name: Verify Supabase CLI
+        run: npx --no-install supabase --version
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Test Edge Function validation
+        working-directory: backend
+        run: deno test supabase/functions/farm-weather/validation.test.ts
+
+      - name: Validate migrations and backend contracts
+        working-directory: backend
+        run: deno run --allow-read supabase/tests/embedded_migrations.ts
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Build release APK
+        working-directory: frontend
+        run: gradle --no-daemon assembleRelease
+
+      - name: Check production deployment configuration
+        shell: bash
+        run: |
+          if [[ -z "$SUPABASE_ACCESS_TOKEN" || -z "$SUPABASE_DB_PASSWORD" || -z "$SUPABASE_PROJECT_REF" ]]; then
+            echo "::error::Configure SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD as production environment secrets, and SUPABASE_PROJECT_REF as a production environment variable."
+            exit 1
+          fi
+
+      - name: Link production Supabase project
+        working-directory: backend
+        run: npx --no-install supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Verify database connectivity and migration plan
+        working-directory: backend
+        run: npx --no-install supabase db push --dry-run --linked
+
+      - name: Apply pending production migrations
+        working-directory: backend
+        run: npx --no-install supabase db push --linked --yes
+
+      - name: Deploy Supabase Edge Functions
+        working-directory: backend
+        run: npx --no-install supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ steps.version.outputs.value }}
+        run: gh release create "$RELEASE_VERSION" "frontend/app/build/outputs/apk/release/app-release-unsigned.apk" --target "$GITHUB_SHA" --title "FARM FAMILY $RELEASE_VERSION" --generate-notes
