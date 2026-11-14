@@ -4,6 +4,24 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val releaseStoreFile = providers.environmentVariable("FARM_FAMILY_RELEASE_STORE_FILE").orNull
+val releaseStorePassword = providers.environmentVariable("FARM_FAMILY_RELEASE_STORE_PASSWORD").orNull
+val releaseKeyAlias = providers.environmentVariable("FARM_FAMILY_RELEASE_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("FARM_FAMILY_RELEASE_KEY_PASSWORD").orNull
+val releaseSigningConfigured = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { !it.isNullOrBlank() }
+val releaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.substringAfterLast(':').contains("Release", ignoreCase = true)
+}
+
+if (releaseBuildRequested && !releaseSigningConfigured) {
+    throw GradleException("Release signing is not configured. Set the FARM_FAMILY_RELEASE_* environment variables.")
+}
+
 android {
     namespace = "com.farmfamily.app"
     compileSdk = 36
@@ -14,6 +32,25 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
+    }
+
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            create("release") {
+                storeFile = file(requireNotNull(releaseStoreFile))
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            if (releaseSigningConfigured) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
     }
 
     compileOptions {

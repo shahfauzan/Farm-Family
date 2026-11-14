@@ -55,6 +55,7 @@ Requirements: Android Studio, Android SDK 36, and Java 17+. Open `frontend/` in 
 ```
 
 The Gradle wrapper pins the project Gradle version. CI also builds the debug APK.
+Release builds require the release keystore and signing environment variables documented in [the frontend README](frontend/README.md).
 
 ## Configuration and secrets
 
@@ -66,6 +67,7 @@ Production deployment uses the GitHub `production` Environment:
 - Variable: `SUPABASE_PROJECT_REF`
 
 Configure required Edge Function API keys directly as Supabase secrets. Do not put their values in GitHub workflow files or logs.
+Android release signing uses the repository Actions Secrets `ANDROID_RELEASE_KEYSTORE_BASE64`, `ANDROID_RELEASE_KEYSTORE_PASSWORD`, `ANDROID_RELEASE_KEY_ALIAS`, and `ANDROID_RELEASE_KEY_PASSWORD`. Never commit the keystore or signing credentials.
 
 ## Testing and CI
 
@@ -75,6 +77,6 @@ The root [build workflow](.github/workflows/build.yml) runs Edge Function valida
 
 Push a semantic version tag such as `v1.2.3`, or manually run the [release workflow](.github/workflows/release.yml) with a semantic version. The workflow validates first, builds an Android release APK, checks database connectivity with a migration dry run, applies pending migrations, deploys Edge Functions, and then creates a GitHub Release.
 
-The attached Android APK is currently **unsigned**. No production signing configuration is present, so it is not ready for Play Store distribution. The release workflow has not yet been verified against the hosted Supabase project.
+The release workflow verifies the signed APK and attaches it to the GitHub Release. APK signing does not imply Play Store readiness. The release workflow has not yet been verified against the hosted Supabase project.
 
 Do not declare production readiness until the production deployment and real Supabase runtime checks have succeeded.

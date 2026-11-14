@@ -24,6 +24,14 @@ From the frontend folder:
 
 The project must be launched with a real Android emulator or device after a successful debug assemble.
 
+Release builds require `FARM_FAMILY_RELEASE_STORE_FILE`, `FARM_FAMILY_RELEASE_STORE_PASSWORD`, `FARM_FAMILY_RELEASE_KEY_ALIAS`, and `FARM_FAMILY_RELEASE_KEY_PASSWORD` in the build environment. The GitHub Actions workflows read the keystore and credentials from repository Actions Secrets; never commit the keystore or signing credentials.
+
+```bash
+./gradlew assembleRelease
+```
+
+The signed APK is written to `app/build/outputs/apk/release/app-release.apk`.
+
 ## Current limits
 
 This rebuild replaces the previous mock-only frontend with an architecture-first foundation. Live Supabase authentication and family-scoped backend integration remain the next operational step after the Android toolchain is available and the real backend project is configured.

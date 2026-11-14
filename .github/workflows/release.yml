@@ -92,9 +92,41 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
+      - name: Configure release signing
+        env:
+          ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
+          ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
+          ANDROID_RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_RELEASE_KEY_ALIAS }}
+          ANDROID_RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          for name in ANDROID_RELEASE_KEYSTORE_BASE64 ANDROID_RELEASE_KEYSTORE_PASSWORD ANDROID_RELEASE_KEY_ALIAS ANDROID_RELEASE_KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing required repository secret: $name"
+              exit 1
+            fi
+          done
+          keystore="$RUNNER_TEMP/farm-family-release.jks"
+          printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          echo "FARM_FAMILY_RELEASE_STORE_FILE=$keystore" >> "$GITHUB_ENV"
+          echo "FARM_FAMILY_RELEASE_STORE_PASSWORD=$ANDROID_RELEASE_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "FARM_FAMILY_RELEASE_KEY_ALIAS=$ANDROID_RELEASE_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "FARM_FAMILY_RELEASE_KEY_PASSWORD=$ANDROID_RELEASE_KEY_PASSWORD" >> "$GITHUB_ENV"
+
       - name: Build release APK
         working-directory: frontend
         run: gradle --no-daemon assembleRelease
+
+      - name: Verify Release APK signature
+        run: |
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose frontend/app/build/outputs/apk/release/app-release.apk
+
+      - name: Upload signed Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: farm-family-release-apk
+          path: frontend/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
 
       - name: Check production deployment configuration
         shell: bash
@@ -124,4 +156,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_VERSION: ${{ steps.version.outputs.value }}
-        run: gh release create "$RELEASE_VERSION" "frontend/app/build/outputs/apk/release/app-release-unsigned.apk" --target "$GITHUB_SHA" --title "FARM FAMILY $RELEASE_VERSION" --generate-notes
+        run: gh release create "$RELEASE_VERSION" "frontend/app/build/outputs/apk/release/app-release.apk" --target "$GITHUB_SHA" --title "FARM FAMILY $RELEASE_VERSION" --generate-notes
