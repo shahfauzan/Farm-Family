@@ -48,13 +48,13 @@ The embedded migration test does not replace tests against a real Supabase stack
 
 ### Android frontend
 
-Requirements: Android Studio, Android SDK 36, Java 17+, and Gradle 8.13. Open `frontend/` in Android Studio or build from that directory:
+Requirements: Android Studio, Android SDK 36, and Java 17+. Open `frontend/` in Android Studio or build from that directory:
 
 ```powershell
-gradle --no-daemon assembleDebug
+.\gradlew.bat --no-daemon assembleDebug
 ```
 
-The project does not currently include a Gradle wrapper. CI installs Gradle 8.13 and builds the debug APK.
+The Gradle wrapper pins the project Gradle version. CI also builds the debug APK.
 
 ## Configuration and secrets
 
