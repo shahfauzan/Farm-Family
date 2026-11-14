@@ -1,22 +1,29 @@
 # FARM FAMILY Android frontend
 
-An independent native Android frontend project for FARM FAMILY, built with Kotlin and Jetpack Compose. It uses a local mock repository and UI state so screens can be reviewed before integration with the finalized backend.
+A native Android frontend for FARM FAMILY built with Kotlin and Jetpack Compose. The app is structured around family-scoped data, offline-first repository flow, auth-aware state, and real backend-first operations rather than static demo-only screen logic.
 
-## Open and run
+## Current foundation
 
-Open this folder in Android Studio with Android SDK 36 and JDK 17 or newer installed, then run the `app` configuration on an emulator or Android device. This workspace currently has no Java, Gradle, Android SDK, or ADB command available, so an APK could not be built here.
+- Forest green + warm cream design system with standard Material 3 primitives
+- Real app flow for login, home dashboard, records, reports, AI, more, settings, and sync states
+- Family-scoped state and repository model that is ready for Supabase-backed integration
+- Local-first repository abstraction with sync metadata and offline handling
+- Frontend contract documentation in [FRONTEND_CONTRACT.md](FRONTEND_CONTRACT.md)
 
-The repository-root GitHub Actions workflow builds a debug APK on pushes, pull requests, and manual runs. The production release workflow builds an unsigned release APK after the required Supabase deployment steps succeed. The APK is not signed for Play Store distribution.
+## Required build environment
 
-## Current frontend foundation
+Install the Android SDK, JDK 17+, and Gradle wrapper before running the project.
 
-- Forest green and warm cream design system, shared Compose components, and an internal design-system reference screen.
-- Five primary destinations: Home, Records, Reports, AI, and More.
-- Dashboard with family/date context, seasonal crop, farm KPIs, activity, backup status, AI shortcut, and an offline preview toggle.
-- Category-based farm records, field and expense lists, add-field and add-expense forms, search, reports, AI response mock, activity, family members, settings, profile, and backup/export/import UI.
-- Centralized app labels and language selection structure for English, Nepali, Awadhi, Hindi, and Urdu.
-- Mock data is held behind `FarmRepository`; no backend or database implementation is included.
+## Build commands
+
+From the frontend folder:
+
+```bash
+./gradlew assembleDebug
+```
+
+The project must be launched with a real Android emulator or device after a successful debug assemble.
 
 ## Current limits
 
-This is the first implementation pass, not the completed product described in the full specification. The environment has no Android build/runtime tools, so compilation and device/emulator verification remain outstanding. Some sections use local preview interactions and sample content; authentication, syncing, exports/imports, voice input, QR invites, and AI service calls are not connected.
+This rebuild replaces the previous mock-only frontend with an architecture-first foundation. Live Supabase authentication and family-scoped backend integration remain the next operational step after the Android toolchain is available and the real backend project is configured.

@@ -19,7 +19,7 @@ try {
     create function public.digest(text,text) returns bytea language sql immutable as $$ select public.digest(convert_to($1,'UTF8'),$2) $$;
     create function public.gen_random_bytes(integer) returns bytea language sql volatile as $$ select decode(substr(repeat(md5(random()::text),ceil($1/16.0)::integer),1,$1*2),'hex') $$;
   `);
-  for (const name of ['202611140001_farm_family.sql','202611140002_secure_operations.sql','202611140003_weather_quota.sql','202611140004_unit_safe_harvest_reports.sql']) {
+  for (const name of ['202611140001_farm_family.sql','202611140002_secure_operations.sql','202611140003_weather_quota.sql','202611140004_unit_safe_harvest_reports.sql','202611140005_finance_currency_validation.sql']) {
     const source = await Deno.readTextFile(`supabase/migrations/${name}`);
     const sql = source.replace(/^create extension if not exists pgcrypto;\s*/m, '-- pgcrypto stubbed for embedded migration syntax validation.\n');
     await db.exec(sql);
@@ -65,6 +65,12 @@ try {
   const mixedYearHarvest=(await q(`select harvest_quantity from public.family_year_summary($1,2026)`,[familyA])).rows[0].harvest_quantity;
   if(mixedSeasonHarvest!==null||mixedYearHarvest!==null)throw new Error('Harvest reports combined incompatible units');
   console.log('PASS season/year harvest reports avoid combining different measurement units');
+  await q(`update public.crop_seasons set costs_complete=true,revenue_complete=true where id=$1`,[seasonA]);
+  await q(`insert into public.sales(family_id,crop_season_id,sold_on,quantity,unit,unit_price,total_amount,currency) values($1,$2,'2026-10-15',10,'kg',10,200,'NPR')`,[familyA,seasonA]);
+  await q(`insert into public.expenses(family_id,crop_season_id,expense_date,description,amount,currency) values($1,$2,'2026-10-17','Seed purchase',150,'USD')`,[familyA,seasonA]);
+  const mixedCurrencySummary=(await q(`select currency,revenue,cost,profit from public.family_finance_summary($1,null,null) order by currency`,[familyA])).rows;
+  if(mixedCurrencySummary.some((row:any)=>row.profit !== null))throw new Error('Finance summary combined mismatched currencies');
+  console.log('PASS finance summary keeps profit null when revenue and cost currencies do not match');
   const category=(await q(`insert into public.expense_categories(family_id,name) values($1,'Test category') returning id`,[familyA])).rows[0].id as string;
   const ownCount=(await q(`select count(*)::int n from public.fields where family_id=$1`,[familyA])).rows[0].n;
   const foreignCount=(await q(`select count(*)::int n from public.fields where family_id=$1`,[familyB])).rows[0].n;
