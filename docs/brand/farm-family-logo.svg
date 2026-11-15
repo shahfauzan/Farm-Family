@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="620" height="160" viewBox="0 0 620 160" role="img" aria-labelledby="title description">
+  <title id="title">Farm Family</title>
+  <desc id="description">A sprout growing above farm field rows, with a rising golden sun.</desc>
+  <rect x="8" y="8" width="144" height="144" rx="32" fill="#174B38"/>
+  <svg x="8" y="8" width="144" height="144" viewBox="0 0 108 108">
+    <circle cx="73" cy="31" r="7" fill="#E6BA63"/>
+    <path d="M53 64C42 62 35 55 35 45c11-1 20 5 23 16z" fill="#E6F1E8"/>
+    <path d="M55 58c3-11 12-17 23-16 0 11-9 19-22 22z" fill="#E6BA63"/>
+    <path d="m53 59-12-10m16 10 14-12" fill="none" stroke="#174B38" stroke-linecap="round" stroke-width="1.8"/>
+    <path d="M54 79c0-9 0-18 1-28" fill="none" stroke="#E6F1E8" stroke-linecap="round" stroke-width="3.5"/>
+    <path d="M28 77c10-7 20-7 28 0 8-7 18-7 26-1" fill="none" stroke="#E6F1E8" stroke-linecap="round" stroke-width="3"/>
+    <path d="M32 84c9-5 17-5 24 0 8-5 15-5 22-1" fill="none" stroke="#E6BA63" stroke-linecap="round" stroke-width="2.5"/>
+  </svg>
+  <text x="184" y="96" fill="#174B38" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="700" letter-spacing="1">FARM FAMILY</text>
+</svg>

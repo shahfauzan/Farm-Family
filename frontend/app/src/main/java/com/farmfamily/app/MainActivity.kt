@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -83,6 +84,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -351,9 +353,25 @@ private fun FarmFamilyApp() {
             if (route == null) {
                 TopAppBar(
                     title = {
-                        Column {
-                            Text(Strings.appName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Forest)
-                            Text(family.familyName, fontSize = 12.sp, color = Muted)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(Forest),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Image(
+                                    painter = painterResource(R.drawable.farm_family_mark),
+                                    contentDescription = "FARM FAMILY logo",
+                                    modifier = Modifier.size(40.dp)
+                                )
+                            }
+                            Spacer(Modifier.width(10.dp))
+                            Column {
+                                Text(Strings.appName, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Forest)
+                                Text(family.familyName, fontSize = 12.sp, color = Muted)
+                            }
                         }
                     },
                     actions = {
@@ -465,10 +483,14 @@ private fun LoginScreen(
             modifier = Modifier
                 .size(72.dp)
                 .clip(RoundedCornerShape(18.dp))
-                .background(Leaf),
+                .background(Forest),
             contentAlignment = Alignment.Center
         ) {
-            Text("🌾", fontSize = 34.sp)
+            Image(
+                painter = painterResource(R.drawable.farm_family_mark),
+                contentDescription = "FARM FAMILY logo",
+                modifier = Modifier.size(72.dp)
+            )
         }
         Text(Strings.loginTitle, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Forest)
         Text("Use your authenticated family account to access farm records.", color = Muted)

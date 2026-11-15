@@ -1,5 +1,7 @@
 # Farm Family
 
+![Farm Family logo](docs/brand/farm-family-logo.svg)
+
 Farm Family is a family-oriented farm management application. This repository brings together its Android frontend, Supabase backend, database migrations, Edge Functions, and CI/release automation.
 
 ## Features

@@ -5,6 +5,7 @@ A native Android frontend for FARM FAMILY built with Kotlin and Jetpack Compose.
 ## Current foundation
 
 - Forest green + warm cream design system with standard Material 3 primitives
+- FARM FAMILY sprout-and-field brand mark used by the app header, sign-in screen, and adaptive launcher icon
 - Real app flow for login, home dashboard, records, reports, AI, more, settings, and sync states
 - Family-scoped state and repository model that is ready for Supabase-backed integration
 - Local-first repository abstraction with sync metadata and offline handling
