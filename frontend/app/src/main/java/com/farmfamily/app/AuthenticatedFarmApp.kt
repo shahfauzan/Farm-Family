@@ -1,1518 +1,242 @@
 package com.farmfamily.app
 
-import android.os.Handler
-import android.content.Intent
 import android.net.Uri
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.CloudDone
-import androidx.compose.material.icons.filled.CloudOff
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Landscape
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.UUID
-import java.util.concurrent.Executor
 
-private enum class FarmDestination(val label: String) {
-    HOME("Home"),
-    RECORDS("Records"),
-    REPORTS("Reports"),
-    AI("AI"),
-    MORE("More")
+@Composable
+internal fun FarmFamilyApp(
+    viewModel: FarmFamilyViewModel,
+    initialCallback: Uri?,
+    onCallbackHandled: () -> Unit
+) {
+    val state = viewModel.state.value
+    LaunchedEffect(initialCallback) {
+        viewModel.start(initialCallback)
+        if (initialCallback != null) onCallbackHandled()
+    }
+
+    when {
+        state.authLoading -> FarmSplashScreen()
+        state.passwordRecovery && state.authSession != null -> FarmPasswordResetScreen(
+            loading = state.authLoading,
+            message = state.authMessage,
+            error = state.authMessageIsError,
+            onSave = viewModel::setNewPassword,
+            onBack = viewModel::clearAuthMessage
+        )
+        state.authSession == null -> {
+            if (state.passwordRecovery) {
+                FarmPasswordResetScreen(
+                    loading = state.authLoading,
+                    message = state.authMessage,
+                    error = state.authMessageIsError,
+                    onSave = viewModel::setNewPassword,
+                    onBack = { viewModel.clearAuthMessage() }
+                )
+            } else {
+                FarmAuthenticationScreen(
+                    loading = state.authLoading,
+                    message = state.authMessage,
+                    messageIsError = state.authMessageIsError,
+                    onSignIn = viewModel::signIn,
+                    onSignUp = viewModel::signUp,
+                    onRecover = viewModel::recoverPassword
+                )
+            }
+        }
+        state.familyLoading && state.memberships == null -> FarmSplashScreen("Loading your family")
+        state.memberships == null && state.familyError != null -> FarmErrorScreen(
+            title = "We couldn’t load your family",
+            message = state.familyError,
+            onRetry = viewModel::loadFamilies
+        )
+        state.memberships?.isEmpty() == true -> FarmFamilySetupScreen(
+            loading = state.familyLoading,
+            error = state.familyError,
+            onCreate = viewModel::createFamily,
+            onJoin = viewModel::joinFamily
+        )
+        state.family == null && !state.memberships.isNullOrEmpty() -> FarmFamilyChooserScreen(
+            families = state.memberships.orEmpty(),
+            onSelect = viewModel::selectFamily
+        )
+        state.family == null -> FarmSplashScreen("Preparing your farm")
+        else -> FarmWorkspaceScreen(viewModel, state)
+    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-internal fun AuthenticatedFarmApp(
-    session: AuthSession,
-    repository: SupabaseFarmRepository,
-    executor: Executor,
-    mainHandler: Handler,
-    onSignOut: () -> Unit
-) {
-    var memberships by remember { mutableStateOf<List<FamilyMembership>?>(null) }
-    var selectedFamily by remember { mutableStateOf<FamilyMembership?>(null) }
-    var familyLoading by remember { mutableStateOf(true) }
-    var familyError by remember { mutableStateOf<String?>(null) }
-    var fields by remember { mutableStateOf<List<FarmFieldRecord>?>(null) }
-    var recordsOffline by remember { mutableStateOf(false) }
-    var pendingFieldCount by remember { mutableStateOf(0) }
-    var season by remember { mutableStateOf<CropSeasonSummary?>(null) }
-    var recordsLoading by remember { mutableStateOf(false) }
-    var recordsError by remember { mutableStateOf<String?>(null) }
-    var yearlyReport by remember { mutableStateOf<YearFarmReport?>(null) }
-    var reportLoading by remember { mutableStateOf(false) }
-    var reportError by remember { mutableStateOf<String?>(null) }
-    var savingField by remember { mutableStateOf(false) }
-    var saveError by remember { mutableStateOf<String?>(null) }
-    var isAddingField by rememberSaveable { mutableStateOf(false) }
-    var fieldDraftId by rememberSaveable { mutableStateOf("") }
-    var destination by rememberSaveable { mutableStateOf(FarmDestination.HOME.name) }
-    var toast by remember { mutableStateOf<String?>(null) }
-    var aiQuestion by rememberSaveable { mutableStateOf("") }
-    var aiAnswer by remember { mutableStateOf<FarmAiAnswer?>(null) }
-    var aiLoading by remember { mutableStateOf(false) }
-    var aiError by remember { mutableStateOf<String?>(null) }
-    var backups by remember { mutableStateOf<List<BackupRecord>?>(null) }
-    var backupLoading by remember { mutableStateOf(false) }
-    var backupError by remember { mutableStateOf<String?>(null) }
-    var backupMessage by remember { mutableStateOf<String?>(null) }
-    var restorePreview by remember { mutableStateOf<org.json.JSONObject?>(null) }
-    var downloadLoadingId by remember { mutableStateOf<String?>(null) }
-    val snackbarHost = remember { SnackbarHostState() }
-    val context = LocalContext.current
-
-    fun reloadFamilies() {
-        familyLoading = true
-        familyError = null
-        executor.execute {
-            try {
-                val result = repository.loadFamilies(session.accessToken, session.userId)
-                mainHandler.post {
-                    memberships = result
-                    selectedFamily = selectedFamily?.let { current ->
-                        result.firstOrNull { it.id == current.id }
-                    } ?: result.singleOrNull()
-                    familyLoading = false
-                }
-            } catch (error: Exception) {
-                mainHandler.post {
-                    familyError = error.message ?: "Family details could not be loaded."
-                    familyLoading = false
-                }
-            }
-        }
-    }
-
-    fun reloadRecords(family: FamilyMembership) {
-        recordsLoading = true
-        recordsError = null
-        executor.execute {
-            try {
-                val fieldSnapshot = repository.loadFields(session.accessToken, family.id)
-                var seasonLoadError: String? = null
-                val loadedSeason = try {
-                    repository.loadCurrentSeason(session.accessToken, family.id)
-                } catch (error: Exception) {
-                    seasonLoadError = error.message ?: "Current crop season could not be loaded."
-                    null
-                }
-                mainHandler.post {
-                    fields = fieldSnapshot.fields
-                    recordsOffline = fieldSnapshot.isOffline
-                    pendingFieldCount = fieldSnapshot.pendingCount
-                    season = loadedSeason
-                    recordsError = fieldSnapshot.syncError ?: seasonLoadError
-                    recordsLoading = false
-                }
-            } catch (error: Exception) {
-                mainHandler.post {
-                    recordsError = error.message ?: "Farm records could not be loaded."
-                    recordsLoading = false
-                }
-            }
-        }
-    }
-
-    fun reloadReport(family: FamilyMembership) {
-        reportLoading = true
-        reportError = null
-        executor.execute {
-            try {
-                val result = repository.loadCurrentYearReport(session.accessToken, family.id)
-                mainHandler.post {
-                    yearlyReport = result
-                    reportLoading = false
-                }
-            } catch (error: Exception) {
-                mainHandler.post {
-                    reportError = error.message ?: "Farm reports could not be loaded."
-                    reportLoading = false
-                }
-            }
-        }
-    }
-
-    fun runFamilyAction(action: () -> Unit) {
-        familyLoading = true
-        familyError = null
-        executor.execute {
-            try {
-                action()
-                val result = repository.loadFamilies(session.accessToken, session.userId)
-                check(result.isNotEmpty()) {
-                    "The operation completed, but family membership could not be verified. Reload and check your family access."
-                }
-                mainHandler.post {
-                    memberships = result
-                    selectedFamily = result.singleOrNull()
-                    familyLoading = false
-                }
-            } catch (error: Exception) {
-                mainHandler.post {
-                    familyError = error.message ?: "Family setup could not be completed."
-                    familyLoading = false
-                }
-            }
-        }
-    }
-
-    fun createField(
-        family: FamilyMembership,
-        localId: String,
-        name: String,
-        area: Double,
-        unit: String,
-        location: String,
-        notes: String
+internal fun FarmSplashScreen(message: String = "Growing together") {
+    androidx.compose.foundation.layout.Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
     ) {
-        savingField = true
-        saveError = null
-        executor.execute {
-            try {
-                val result = repository.createField(
-                    session.accessToken,
-                    family.id,
-                    localId,
-                    name,
-                    area,
-                    unit,
-                    location,
-                    notes
-                )
-                if (result.state == FieldSaveState.FAILED) {
-                    repository.discardFailedField(family.id, localId)
-                    throw IllegalStateException(result.message ?: "The field could not be synchronized.")
-                }
-                mainHandler.post {
-                    savingField = false
-                    isAddingField = false
-                    destination = FarmDestination.RECORDS.name
-                    toast = when (result.state) {
-                        FieldSaveState.SYNCED -> "Field saved to your family records."
-                        FieldSaveState.PENDING -> "Field saved on this device. It will sync when you're online."
-                        FieldSaveState.FAILED -> error("Handled above")
-                    }
-                    reloadRecords(family)
-                }
-            } catch (error: Exception) {
-                mainHandler.post {
-                    saveError = error.message ?: "Field could not be saved."
-                    savingField = false
-                }
-            }
-        }
-    }
-
-    fun openAddField() {
-        fieldDraftId = UUID.randomUUID().toString()
-        saveError = null
-        isAddingField = true
-    }
-
-    fun askAi(question: String) {
-        aiLoading = true
-        aiError = null
-        executor.execute {
-            try {
-                val answer = repository.askFarmAi(
-                    accessToken = session.accessToken,
-                    familyId = requireNotNull(selectedFamily).id,
-                    question = question
-                )
-                mainHandler.post { aiAnswer = answer; aiLoading = false }
-            } catch (error: Exception) {
-                mainHandler.post { aiError = error.message ?: "Farm AI is unavailable."; aiLoading = false }
-            }
-        }
-    }
-
-    fun loadBackups(familyId: String) {
-        backupLoading = true
-        backupError = null
-        executor.execute {
-            try {
-                val result = repository.loadBackups(session.accessToken, familyId)
-                mainHandler.post { backups = result; backupLoading = false }
-            } catch (error: Exception) {
-                mainHandler.post { backupError = error.message ?: "Backups could not be loaded."; backupLoading = false }
-            }
-        }
-    }
-
-    fun exportBackup(familyId: String, format: String) {
-        backupLoading = true
-        backupError = null
-        backupMessage = null
-        executor.execute {
-            try {
-                val result = repository.exportBackup(session.accessToken, familyId, format)
-                val updated = repository.loadBackups(session.accessToken, familyId)
-                mainHandler.post { backupMessage = result; backups = updated; backupLoading = false }
-            } catch (error: Exception) {
-                mainHandler.post { backupError = error.message ?: "Backup export failed."; backupLoading = false }
-            }
-        }
-    }
-
-    fun previewBackup(backupId: String) {
-        backupLoading = true
-        backupError = null
-        executor.execute {
-            try {
-                val result = repository.previewRestore(session.accessToken, backupId)
-                mainHandler.post { restorePreview = result; backupLoading = false }
-            } catch (error: Exception) {
-                mainHandler.post { backupError = error.message ?: "Backup validation failed."; backupLoading = false }
-            }
-        }
-    }
-
-    fun confirmBackupRestore(importId: String, familyId: String) {
-        backupLoading = true
-        backupError = null
-        executor.execute {
-            try {
-                repository.confirmRestore(session.accessToken, importId)
-                val updated = repository.loadBackups(session.accessToken, familyId)
-                mainHandler.post {
-                    restorePreview = null
-                    backupMessage = "Backup restored. Existing matching records were merged."
-                    backups = updated
-                    backupLoading = false
-                    reloadRecords(requireNotNull(selectedFamily))
-                }
-            } catch (error: Exception) {
-                mainHandler.post { backupError = error.message ?: "Restore failed. No success was reported."; backupLoading = false }
-            }
-        }
-    }
-
-    fun downloadBackup(backupId: String) {
-        downloadLoadingId = backupId
-        backupError = null
-        executor.execute {
-            try {
-                val url = repository.backupDownloadUrl(session.accessToken, backupId)
-                mainHandler.post {
-                    downloadLoadingId = null
-                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
-                        .onFailure { backupError = "The signed download link was created, but no browser could open it." }
-                }
-            } catch (error: Exception) {
-                mainHandler.post { downloadLoadingId = null; backupError = error.message ?: "Backup download could not be prepared." }
-            }
-        }
-    }
-
-    LaunchedEffect(session.userId, session.accessToken) {
-        reloadFamilies()
-    }
-    LaunchedEffect(selectedFamily?.id, session.accessToken) {
-        selectedFamily?.let(::reloadRecords)
-    }
-    LaunchedEffect(selectedFamily?.id, destination) {
-        if (destination == FarmDestination.REPORTS.name) {
-            selectedFamily?.let(::reloadReport)
-        }
-    }
-    LaunchedEffect(toast) {
-        toast?.let {
-            snackbarHost.showSnackbar(it)
-            toast = null
-        }
-    }
-
-    val familyList = memberships
-    if (familyLoading && familyList == null) {
-        FarmLoadingScreen("Loading your family...")
-        return
-    }
-    if (familyList == null) {
-        FarmErrorScreen(
-            title = "Family details could not be loaded",
-            message = familyError ?: "Try again to continue.",
-            onRetry = ::reloadFamilies
+        androidx.compose.foundation.Image(
+            painter = androidx.compose.ui.res.painterResource(R.drawable.farm_family_mark),
+            contentDescription = "FARM FAMILY",
+            modifier = Modifier.size(88.dp)
         )
-        return
+        androidx.compose.foundation.layout.Spacer(Modifier.size(24.dp))
+        Text("FARM FAMILY", style = MaterialTheme.typography.headlineMedium, color = FarmForest)
+        androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+        Text(message, style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
+        androidx.compose.foundation.layout.Spacer(Modifier.size(24.dp))
+        CircularProgressIndicator(color = FarmGreen, strokeWidth = 2.dp)
     }
-    if (familyList.isEmpty()) {
-        FamilySetupScreen(
-            loading = familyLoading,
-            error = familyError,
-            onCreate = { name -> runFamilyAction { repository.createFamily(session.accessToken, name) } },
-            onJoin = { token -> runFamilyAction { repository.acceptInvitation(session.accessToken, token) } }
+}
+
+@Composable
+internal fun FarmErrorScreen(title: String, message: String, onRetry: () -> Unit) {
+    androidx.compose.foundation.layout.Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
+    ) {
+        Text(title, style = MaterialTheme.typography.headlineSmall, color = FarmForest)
+        androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
+        Text(message, style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
+        androidx.compose.foundation.layout.Spacer(Modifier.size(16.dp))
+        androidx.compose.material3.Button(onClick = onRetry) { Text("Try again") }
+    }
+}
+
+@Composable
+internal fun FarmWorkspaceScreen(viewModel: FarmFamilyViewModel, state: FarmUiState) {
+    var selectedTab by rememberSaveable { mutableStateOf(FarmTab.HOME.name) }
+    val routeStack = rememberSaveable(
+        saver = listSaver(
+            save = { it.toList() },
+            restore = { values -> mutableStateListOf<String>().apply { addAll(values) } }
         )
-        return
-    }
-    if (selectedFamily == null) {
-        FamilyChooserScreen(families = familyList, onSelect = { selectedFamily = it })
-        return
-    }
+    ) { mutableStateListOf<String>() }
+    var signOutConfirm by rememberSaveable { mutableStateOf(false) }
+    val family = state.family ?: return
+    LaunchedEffect(family.id) { viewModel.loadHomeSummary() }
+    BackHandler(routeStack.isNotEmpty()) { routeStack.removeAt(routeStack.lastIndex) }
 
-    val family = requireNotNull(selectedFamily)
-    val currentDestination = FarmDestination.valueOf(destination)
-    val appBarTitle = if (isAddingField) "Add field" else currentDestination.label
+    fun navigate(route: String) { routeStack.add(route) }
+    fun back() { if (routeStack.isNotEmpty()) routeStack.removeAt(routeStack.lastIndex) }
 
-    Scaffold(
-        containerColor = Cream,
-        snackbarHost = { SnackbarHost(snackbarHost) },
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            if (isAddingField) "NEW RECORD · FAMILY DATA" else family.name.uppercase(),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Green
-                        )
-                        Text(appBarTitle, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-                    }
-                },
-                navigationIcon = {
-                    if (isAddingField) {
-                        IconButton(onClick = { isAddingField = false; saveError = null }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                        }
-                    }
-                },
-                actions = {
-                    if (!isAddingField) {
-                        IconButton(onClick = { reloadRecords(family) }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Refresh family data")
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Cream)
+    FarmWorkspaceScaffold(
+        family = family,
+        selectedTab = selectedTab,
+        nestedTitle = routeStack.lastOrNull()?.let(::farmRouteTitle),
+        onSelectTab = { tab -> selectedTab = tab.name; routeStack.clear() },
+        onBack = ::back,
+        onSearch = { navigate("search") },
+        onNotifications = { navigate("notifications") },
+        onQuickAdd = { navigate("quick_add") }
+    ) { contentModifier ->
+        val route = routeStack.lastOrNull()
+        if (route != null) {
+            FarmNestedRoute(
+                route = route,
+                modifier = contentModifier,
+                viewModel = viewModel,
+                state = state,
+                onNavigate = ::navigate,
+                onBack = ::back,
+                onSignOut = { signOutConfirm = true }
             )
-        },
-        bottomBar = {
-            NavigationBar(containerColor = Color.White) {
-                FarmDestination.entries.forEach { item ->
-                    NavigationBarItem(
-                        selected = currentDestination == item && !isAddingField,
-                        onClick = { isAddingField = false; destination = item.name },
-                        icon = {
-                            Icon(
-                                when (item) {
-                                    FarmDestination.HOME -> Icons.Default.Home
-                                    FarmDestination.RECORDS -> Icons.Default.FolderOpen
-                                    FarmDestination.REPORTS -> Icons.Default.BarChart
-                                    FarmDestination.AI -> Icons.Default.AutoAwesome
-                                    FarmDestination.MORE -> Icons.Default.Menu
-                                },
-                                contentDescription = item.label
-                            )
-                        },
-                        label = { Text(item.label, maxLines = 1) }
-                    )
-                }
-            }
-        }
-    ) { insets ->
-        Box(Modifier.fillMaxSize().padding(insets)) {
-            when {
-                isAddingField -> AddFieldScreen(
-                    localId = fieldDraftId,
-                    canAdd = family.canAdd,
-                    saving = savingField,
-                    error = saveError,
-                    onSave = { draftId, name, area, unit, location, notes ->
-                        createField(family, draftId, name, area, unit, location, notes)
-                    }
+        } else {
+            when (FarmTab.valueOf(selectedTab)) {
+                FarmTab.HOME -> FarmHomeScreen(
+                    modifier = contentModifier,
+                    family = family,
+                    userName = state.authSession?.displayName.orEmpty().ifBlank { state.authSession?.email?.substringBefore('@').orEmpty() },
+                    fields = state.records["fields"].orEmpty(),
+                    seasons = state.records["crop_seasons"].orEmpty(),
+                    report = state.yearReport,
+                    weather = state.weather,
+                    loading = state.loading,
+                    errors = state.errors,
+                    onRetry = viewModel::loadHomeSummary,
+                    onLoadWeather = viewModel::loadWeather,
+                    onNavigate = ::navigate
                 )
-                currentDestination in listOf(FarmDestination.HOME, FarmDestination.RECORDS) &&
-                    recordsLoading && fields == null -> FarmLoadingScreen("Loading farm records...")
-                currentDestination in listOf(FarmDestination.HOME, FarmDestination.RECORDS) &&
-                    recordsError != null && fields == null -> FarmErrorScreen(
-                    title = "Records could not be loaded",
-                    message = recordsError.orEmpty(),
-                    onRetry = { reloadRecords(family) }
+                FarmTab.RECORDS -> FarmRecordsHubScreen(
+                    modifier = contentModifier,
+                    family = family,
+                    records = state.records,
+                    onNavigate = ::navigate
                 )
-                else -> when (currentDestination) {
-                    FarmDestination.HOME -> FarmHomeScreen(
-                        family = family,
-                        userName = session.displayName.ifBlank { session.email.substringBefore("@") },
-                        fields = fields.orEmpty(),
-                        season = season,
-                        recordsLoading = recordsLoading,
-                        recordsError = recordsError,
-                        recordsOffline = recordsOffline,
-                        pendingFieldCount = pendingFieldCount,
-                        onFields = { destination = FarmDestination.RECORDS.name },
-                        onAddField = ::openAddField,
-                        onRetry = { reloadRecords(family) }
-                    )
-                    FarmDestination.RECORDS -> FarmRecordsScreen(
-                        fields = fields.orEmpty(),
-                        loading = recordsLoading,
-                        error = recordsError,
-                        isOffline = recordsOffline,
-                        pendingCount = pendingFieldCount,
-                        canAdd = family.canAdd,
-                        onAddField = ::openAddField,
-                        onRetry = { reloadRecords(family) }
-                    )
-                    FarmDestination.REPORTS -> FarmReportsScreen(
-                        family = family,
-                        report = yearlyReport,
-                        loading = reportLoading,
-                        error = reportError,
-                        onRetry = { reloadReport(family) }
-                    )
-                    FarmDestination.AI -> FarmAiScreen(
-                        question = aiQuestion,
-                        answer = aiAnswer,
-                        loading = aiLoading,
-                        error = aiError,
-                        onQuestionChange = { aiQuestion = it },
-                        onAsk = { askAi(aiQuestion) }
-                    )
-                    FarmDestination.MORE -> FarmMoreScreen(
-                        family = family,
-                        backups = backups,
-                        backupLoading = backupLoading,
-                        downloadLoadingId = downloadLoadingId,
-                        backupError = backupError,
-                        backupMessage = backupMessage,
-                        onLoadBackups = { loadBackups(family.id) },
-                        onExport = { exportBackup(family.id, it) },
-                        onDownload = ::downloadBackup,
-                        onPreviewRestore = ::previewBackup,
-                        onSignOut = onSignOut
-                    )
-                }
+                FarmTab.REPORTS -> FarmReportsScreen(
+                    modifier = contentModifier,
+                    family = family,
+                    report = state.yearReport,
+                    loading = "home_report" in state.loading,
+                    error = state.errors["home_report"],
+                    onRetry = { viewModel.loadYearReport() },
+                    onSelectYear = viewModel::loadYearReport
+                )
+                FarmTab.AI -> FarmAiScreen(
+                    modifier = contentModifier,
+                    answer = state.aiAnswer,
+                    loading = "ai" in state.loading,
+                    error = state.errors["ai"],
+                    onAsk = viewModel::askAi
+                )
+                FarmTab.MORE -> FarmMoreScreen(
+                    modifier = contentModifier,
+                    family = family,
+                    session = state.authSession,
+                    onNavigate = ::navigate
+                )
             }
         }
     }
-    restorePreview?.let { preview ->
-        val counts = preview.optJSONObject("counts")
+
+    if (signOutConfirm) {
         AlertDialog(
-            onDismissRequest = { if (!backupLoading) restorePreview = null },
-            title = { Text("Review backup restore") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("The backup has been validated. Confirming merges records with matching IDs; records absent from the backup are kept.")
-                    counts?.let { obj ->
-                        (0 until obj.length()).forEach { index ->
-                            val key = obj.names()?.optString(index).orEmpty()
-                            Text("$key · ${obj.opt(key)}", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                    backupError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = !backupLoading && preview.optString("import_id").isNotBlank(),
-                    onClick = { confirmBackupRestore(preview.optString("import_id"), family.id) }
-                ) { Text(if (backupLoading) "Restoring…" else "Confirm restore") }
-            },
-            dismissButton = { TextButton(onClick = { restorePreview = null }) { Text("Cancel") } }
+            onDismissRequest = { signOutConfirm = false },
+            title = { Text("Sign out of FARM FAMILY?") },
+            text = { Text("Your saved family records will stay in your account.") },
+            confirmButton = { TextButton(onClick = { signOutConfirm = false; viewModel.signOut() }) { Text("Sign out") } },
+            dismissButton = { TextButton(onClick = { signOutConfirm = false }) { Text("Cancel") } }
         )
     }
 }
 
-@Composable
-private fun FarmHomeScreen(
-    family: FamilyMembership,
-    userName: String,
-    fields: List<FarmFieldRecord>,
-    season: CropSeasonSummary?,
-    recordsLoading: Boolean,
-    recordsError: String?,
-    recordsOffline: Boolean,
-    pendingFieldCount: Int,
-    onFields: () -> Unit,
-    onAddField: () -> Unit,
-    onRetry: () -> Unit
-) {
-    val firstName = userName.trim().split(Regex("[\\s._-]+")).firstOrNull().orEmpty()
-    val date = remember {
-        SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()).format(Date())
-    }
-
-    LazyColumn(
-        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(24.dp)
-    ) {
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(date, style = MaterialTheme.typography.labelMedium, color = Muted)
-                Text(
-                    if (firstName.isBlank()) "Good morning." else "Good morning, $firstName.",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Forest
-                )
-            }
-        }
-        item {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = Forest,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        if (season == null) "YOUR FAMILY FARM" else "CURRENT CROP SEASON",
-                        color = Color(0xFFD8E8DE),
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        season?.name ?: "Your family's farm",
-                        color = Color.White,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        season?.let { listOf(it.crop, it.field).filter(String::isNotBlank).joinToString(" · ") }
-                            ?.takeIf(String::isNotBlank)
-                            ?: if (fields.isEmpty()) {
-                                "Add a field to start organizing your farm."
-                            } else {
-                                "No active crop season is recorded yet."
-                            },
-                        color = Color(0xFFE7F1EA),
-                        fontSize = 14.sp
-                    )
-                    if (season == null && fields.isEmpty() && family.canAdd) {
-                        OutlinedButton(onClick = onAddField, modifier = Modifier.heightIn(min = 48.dp)) {
-                            Text("Add your first field", color = Color.White)
-                        }
-                    }
-                }
-            }
-        }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SummaryTile(
-                    value = fields.size.toString(),
-                    label = if (fields.size == 1) "Field" else "Fields",
-                    modifier = Modifier.weight(1f)
-                )
-                SummaryTile(
-                    value = season?.name ?: "—",
-                    label = "Current season",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-        }
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "Around the farm",
-                    modifier = Modifier.weight(1f),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Ink
-                )
-                TextButton(onClick = onFields) { Text("All fields") }
-            }
-        }
-        if (recordsError != null) {
-            item {
-                FarmInlineError(message = recordsError, onRetry = onRetry)
-            }
-        }
-        if (recordsLoading && fields.isEmpty()) {
-            item { FarmLoadingScreen("Refreshing farm records...") }
-        } else if (fields.isEmpty()) {
-            item {
-                FarmEmptyState(
-                    title = "No fields yet",
-                    message = "Add your first field to organize your family's land and crops.",
-                    action = if (family.canAdd) "Add field" else null,
-                    onAction = onAddField
-                )
-            }
-        } else {
-            items(fields.take(3), key = { it.id }) { field ->
-                FieldRecordRow(field, onClick = onFields)
-            }
-        }
-        item {
-            Surface(
-                shape = RoundedCornerShape(14.dp),
-                color = Leaf,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(
-                        if (recordsOffline || pendingFieldCount > 0) Icons.Default.CloudOff else Icons.Default.CloudDone,
-                        contentDescription = null,
-                        tint = if (recordsOffline || pendingFieldCount > 0) Gold else Green
-                    )
-                    Column {
-                        Text(
-                            when {
-                                recordsOffline -> "Offline · showing saved records"
-                                pendingFieldCount > 0 -> "Changes waiting to sync"
-                                else -> "Family records are up to date"
-                            },
-                            fontWeight = FontWeight.Medium,
-                            color = Ink
-                        )
-                        Text(
-                            when {
-                                recordsOffline -> "New fields will sync when you're online."
-                                pendingFieldCount > 0 -> "$pendingFieldCount field changes are saved on this device."
-                                else -> "Your latest records were loaded from Supabase."
-                            },
-                            fontSize = 12.sp,
-                            color = Muted
-                        )
-                    }
-                }
-            }
-        }
-    }
+internal enum class FarmTab(val title: String) {
+    HOME("Home"), RECORDS("Records"), REPORTS("Reports"), AI("AI"), MORE("More")
 }
 
-@Composable
-private fun FarmRecordsScreen(
-    fields: List<FarmFieldRecord>,
-    loading: Boolean,
-    error: String?,
-    isOffline: Boolean,
-    pendingCount: Int,
-    canAdd: Boolean,
-    onAddField: () -> Unit,
-    onRetry: () -> Unit
-) {
-    LazyColumn(
-        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Every season. Every record.", fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Forest)
-                Text("Farm information shared with your family.", fontSize = 14.sp, color = Muted)
-            }
-        }
-        if (isOffline || pendingCount > 0) {
-            item {
-                FarmPermissionMessage(
-                    if (isOffline) {
-                        "Offline · saved fields are available on this device."
-                    } else {
-                        "$pendingCount field changes are waiting to sync."
-                    }
-                )
-            }
-        }
-        item {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = Leaf,
-                modifier = Modifier.fillMaxWidth().clickable(onClick = onRetry)
-            ) {
-                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Landscape, contentDescription = null, tint = Green)
-                    Spacer(Modifier.width(10.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text("Fields", fontWeight = FontWeight.SemiBold)
-                        Text("${fields.size} family fields", fontSize = 12.sp, color = Muted)
-                    }
-                    Icon(Icons.Default.Refresh, contentDescription = "Refresh fields", tint = Green)
-                }
-            }
-        }
-        if (error != null) item { FarmInlineError(error, onRetry) }
-        if (loading && fields.isEmpty()) {
-            item { FarmLoadingScreen("Loading fields...") }
-        } else if (fields.isEmpty()) {
-            item {
-                FarmEmptyState(
-                    title = "No fields yet",
-                    message = "Add your first field to organize your family's land.",
-                    action = if (canAdd) "Add field" else null,
-                    onAction = onAddField
-                )
-            }
-        } else {
-            item {
-                Text("LAND & SEASONS", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Muted)
-            }
-            items(fields, key = { it.id }) { field ->
-                FieldRecordRow(field, onClick = {})
-            }
-        }
-        if (canAdd) {
-            item {
-                Button(
-                    onClick = onAddField,
-                    modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Add field")
-                }
-            }
-        }
+internal fun farmRouteTitle(route: String): String {
+    val parts = route.split(':')
+    return when (parts.firstOrNull()) {
+        "module" -> FarmModules.byTable(parts.getOrNull(1).orEmpty())?.title ?: "Records"
+        "form" -> if (parts.getOrNull(2) == "new") "Add ${FarmModules.byTable(parts.getOrNull(1).orEmpty())?.title?.lowercase().orEmpty().trimEnd('s')}" else "Edit record"
+        "detail" -> "Record details"
+        "family" -> "Family"
+        "members" -> "Family members"
+        "invitations" -> "Invitations"
+        "notifications" -> "Notifications"
+        "search" -> "Search records"
+        "backup" -> "Backup & restore"
+        "profile" -> "Profile"
+        "settings" -> "Settings"
+        "family_settings" -> "Family settings"
+        "quick_add" -> "Add a farm record"
+        else -> parts.firstOrNull()?.replaceFirstChar { it.uppercase() }.orEmpty()
     }
 }
-
-@Composable
-private fun AddFieldScreen(
-    localId: String,
-    canAdd: Boolean,
-    saving: Boolean,
-    error: String?,
-    onSave: (String, String, Double, String, String, String) -> Unit
-) {
-    var name by rememberSaveable { mutableStateOf("") }
-    var area by rememberSaveable { mutableStateOf("") }
-    var unit by rememberSaveable { mutableStateOf("Bigha") }
-    var location by rememberSaveable { mutableStateOf("") }
-    var notes by rememberSaveable { mutableStateOf("") }
-    var validationError by rememberSaveable { mutableStateOf<String?>(null) }
-    val units = listOf("Bigha", "Hectare", "Acre")
-
-    Column(Modifier.fillMaxSize()) {
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 12.dp, bottom = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item {
-                Text("NEW RECORD · FAMILY DATA", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Green)
-                Spacer(Modifier.height(8.dp))
-                Text("Land details", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
-            }
-            item {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it; validationError = null },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Field name *") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(10.dp)
-                )
-            }
-            item {
-                OutlinedTextField(
-                    value = area,
-                    onValueChange = { area = it; validationError = null },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Land area *") },
-                    supportingText = { Text("Enter a number greater than zero.") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    shape = RoundedCornerShape(10.dp)
-                )
-            }
-            item {
-                OutlinedTextField(
-                    value = unit,
-                    onValueChange = { unit = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Area unit *") },
-                    supportingText = { Text("Choose a common unit or enter your local unit.") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(10.dp)
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    units.forEach { option ->
-                        FilterChip(
-                            selected = unit == option,
-                            onClick = { unit = option },
-                            label = { Text(option) }
-                        )
-                    }
-                }
-            }
-            item {
-                OutlinedTextField(
-                    value = location,
-                    onValueChange = { location = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Location") },
-                    supportingText = { Text("Optional") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(10.dp)
-                )
-            }
-            item {
-                OutlinedTextField(
-                    value = notes,
-                    onValueChange = { notes = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Notes") },
-                    supportingText = { Text("Optional") },
-                    minLines = 2,
-                    shape = RoundedCornerShape(10.dp)
-                )
-            }
-            val visibleError = validationError ?: error
-            if (visibleError != null) {
-                item { FarmInlineError(visibleError) }
-            }
-            if (!canAdd) {
-                item {
-                    FarmPermissionMessage("Your family role does not allow adding records.")
-                }
-            }
-        }
-        Button(
-            onClick = {
-                val parsedArea = area.trim().toDoubleOrNull()
-                validationError = when {
-                    name.isBlank() -> "Enter a field name."
-                    parsedArea == null || parsedArea <= 0 -> "Area must be a positive number."
-                    else -> null
-                }
-                if (validationError == null && parsedArea != null && canAdd) {
-                    onSave(localId, name, parsedArea, unit, location, notes)
-                }
-            },
-            enabled = canAdd && !saving,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp).heightIn(min = 52.dp)
-        ) {
-            if (saving) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-            } else {
-                Text("Save record")
-            }
-        }
-    }
-}
-
-@Composable
-private fun FamilySetupScreen(
-    loading: Boolean,
-    error: String?,
-    onCreate: (String) -> Unit,
-    onJoin: (String) -> Unit
-) {
-    var createMode by rememberSaveable { mutableStateOf(true) }
-    var familyName by rememberSaveable { mutableStateOf("") }
-    var invitationCode by rememberSaveable { mutableStateOf("") }
-    var validationError by rememberSaveable { mutableStateOf<String?>(null) }
-
-    Column(
-        modifier = Modifier.fillMaxSize().background(Cream).padding(horizontal = 24.dp),
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text("FAMILY WORKSPACE", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Green)
-        Spacer(Modifier.height(8.dp))
-        Text("Create your family", fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Forest)
-        Spacer(Modifier.height(8.dp))
-        Text("A shared home for your farm.", fontSize = 16.sp, color = Muted)
-        Spacer(Modifier.height(24.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = createMode, onClick = { createMode = true }, label = { Text("Create") })
-            FilterChip(selected = !createMode, onClick = { createMode = false }, label = { Text("Join") })
-        }
-        Spacer(Modifier.height(12.dp))
-        if (createMode) {
-            OutlinedTextField(
-                value = familyName,
-                onValueChange = { familyName = it; validationError = null },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Family name *") },
-                singleLine = true,
-                shape = RoundedCornerShape(10.dp)
-            )
-        } else {
-            OutlinedTextField(
-                value = invitationCode,
-                onValueChange = { invitationCode = it; validationError = null },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Invitation code *") },
-                supportingText = { Text("Use a code shared by a family owner.") },
-                singleLine = true,
-                shape = RoundedCornerShape(10.dp)
-            )
-        }
-        val visibleError = validationError ?: error
-        if (visibleError != null) {
-            Spacer(Modifier.height(8.dp))
-            FarmInlineError(visibleError)
-        }
-        Spacer(Modifier.height(20.dp))
-        Button(
-            onClick = {
-                validationError = when {
-                    createMode && familyName.isBlank() -> "Enter a family name."
-                    !createMode && invitationCode.isBlank() -> "Enter an invitation code."
-                    else -> null
-                }
-                if (validationError == null) {
-                    if (createMode) onCreate(familyName.trim()) else onJoin(invitationCode.trim())
-                }
-            },
-            enabled = !loading,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
-        ) {
-            if (loading) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-            } else {
-                Text(if (createMode) "Create family" else "Join family")
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Family roles and record permissions are enforced by Supabase.",
-            fontSize = 12.sp,
-            color = Muted
-        )
-    }
-}
-
-@Composable
-private fun FamilyChooserScreen(families: List<FamilyMembership>, onSelect: (FamilyMembership) -> Unit) {
-    LazyColumn(
-        contentPadding = PaddingValues(24.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        item {
-            Text("Choose your family", fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Forest)
-            Text("Select the workspace you want to open.", color = Muted)
-        }
-        items(families, key = { it.id }) { family ->
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = Color.White,
-                border = BorderStroke(1.dp, Line),
-                modifier = Modifier.fillMaxWidth().clickable { onSelect(family) }
-            ) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(family.name, fontWeight = FontWeight.SemiBold, color = Ink)
-                    Text("${family.role} · ${family.currency}", fontSize = 12.sp, color = Muted)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FarmReportsScreen(
-    family: FamilyMembership,
-    report: YearFarmReport?,
-    loading: Boolean,
-    error: String?,
-    onRetry: () -> Unit
-) {
-    LazyColumn(
-        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("See what your work adds up to", fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Forest)
-                Text(
-                    report?.year?.let { "Family summary · $it" } ?: "Family summary · this year",
-                    fontSize = 14.sp,
-                    color = Muted
-                )
-            }
-        }
-        if (loading) {
-            item { FarmLoadingScreen("Loading your family report...") }
-        } else if (error != null) {
-            item { FarmInlineError(error, onRetry) }
-        } else if (report == null) {
-            item {
-                FarmEmptyState(
-                    title = "No report data yet",
-                    message = "Add farm records to see this family's yearly summary.",
-                    action = null,
-                    onAction = {}
-                )
-            }
-        } else {
-            item {
-                ReportValueRow(
-                    label = "Sales recorded",
-                    value = report.revenue?.let { "${family.currency} ${formatNumber(it)}" } ?: "No values yet"
-                )
-            }
-            item {
-                ReportValueRow(
-                    label = "Expenses recorded",
-                    value = report.cost?.let { "${family.currency} ${formatNumber(it)}" } ?: "No values yet"
-                )
-            }
-            item {
-                ReportValueRow(
-                    label = "Profit",
-                    value = report.profit?.let { "${family.currency} ${formatNumber(it)}" }
-                        ?: "Not available"
-                )
-            }
-            if (report.profit == null) {
-                item {
-                    Text(
-                        "Profit is shown only when the family has marked season costs and revenue complete and the records use compatible currencies.",
-                        fontSize = 12.sp,
-                        color = Muted
-                    )
-                }
-            }
-            item {
-                ReportValueRow(
-                    label = "Harvest quantity",
-                    value = report.harvestQuantity?.let(::formatNumber) ?: "Mixed measurement units"
-                )
-            }
-            item {
-                Text(
-                    "Calculated from this family's saved records. Totals are withheld when currencies or measurement units cannot be safely combined.",
-                    fontSize = 12.sp,
-                    color = Muted
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReportValueRow(label: String, value: String) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, Line),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 18.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(label, fontSize = 14.sp, color = Muted)
-            Text(value, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Forest)
-        }
-    }
-}
-
-@Composable
-private fun FarmAiScreen(
-    question: String,
-    answer: FarmAiAnswer?,
-    loading: Boolean,
-    error: String?,
-    onQuestionChange: (String) -> Unit,
-    onAsk: () -> Unit
-) {
-    LazyColumn(
-        contentPadding = PaddingValues(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            Text("Your farm, explained", fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Forest)
-            Text("Ask about records saved by your family. Answers use authorized, read-only farm data.", color = Muted)
-        }
-        item {
-            OutlinedTextField(
-                value = question,
-                onValueChange = onQuestionChange,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Ask a question") },
-                placeholder = { Text("How much did we spend this year?") },
-                minLines = 3,
-                maxLines = 5,
-                enabled = !loading
-            )
-        }
-        item {
-            Button(onClick = onAsk, enabled = !loading && question.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
-                if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                else Icon(Icons.Default.AutoAwesome, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text(if (loading) "Checking family records…" else "Ask about farm records")
-            }
-        }
-        if (error != null) item { FarmInlineError(error) }
-        answer?.let { result ->
-            item {
-                Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = Color.White,
-                    border = BorderStroke(1.dp, Line),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("Based on family records", fontWeight = FontWeight.SemiBold, color = Forest)
-                        Text(result.explanation, color = Ink)
-                        Text("${result.records} supporting record${if (result.records == 1) "" else "s"}", fontSize = 12.sp, color = Muted)
-                    }
-                }
-            }
-        }
-        item { Text("Farm AI can summarize and search records. It cannot create, edit, or delete them.", fontSize = 12.sp, color = Muted) }
-    }
-}
-
-@Composable
-private fun FarmMoreScreen(
-    family: FamilyMembership,
-    backups: List<BackupRecord>?,
-    backupLoading: Boolean,
-    downloadLoadingId: String?,
-    backupError: String?,
-    backupMessage: String?,
-    onLoadBackups: () -> Unit,
-    onExport: (String) -> Unit,
-    onDownload: (String) -> Unit,
-    onPreviewRestore: (String) -> Unit,
-    onSignOut: () -> Unit
-) {
-    LazyColumn(
-        contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            Text("More", fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Forest)
-            Text("Family workspace and account", color = Muted)
-        }
-        item {
-            Surface(shape = RoundedCornerShape(12.dp), color = Leaf, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(family.name, fontWeight = FontWeight.SemiBold, color = Forest)
-                    Text("${family.role} · ${family.currency}", fontSize = 14.sp, color = Muted)
-                    HorizontalDivider(color = Line)
-                    Text(
-                        if (family.canAdd) "You can view and add farm records." else "Your role is view-only.",
-                        fontSize = 14.sp,
-                        color = Ink
-                    )
-                }
-            }
-        }
-        item {
-            FarmPermissionMessage(
-                "Only family members with the required permissions can change family records."
-            )
-        }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Backup & restore", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Forest)
-                Text(
-                    if (family.role == "OWNER") "Create a family export or review a ZIP backup before restoring it." else "Backups are available to the family owner.",
-                    fontSize = 14.sp,
-                    color = Muted
-                )
-                if (family.role == "OWNER") {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("CSV", "XLSX", "PDF", "ZIP").forEach { format ->
-                            OutlinedButton(onClick = { onExport(format) }, enabled = !backupLoading) { Text(format) }
-                        }
-                    }
-                    OutlinedButton(onClick = onLoadBackups, enabled = !backupLoading, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (backupLoading) "Loading backups…" else "Show recent backups")
-                    }
-                    backupMessage?.let { Text(it, color = Forest, fontSize = 13.sp) }
-                    backupError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
-                    backups?.let { items ->
-                        if (items.isEmpty()) Text("No completed backups yet.", color = Muted, fontSize = 14.sp)
-                        items.forEach { backup ->
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Column(Modifier.weight(1f)) {
-                                        Text("${backup.format} backup", fontWeight = FontWeight.Medium, color = Ink)
-                                        Text(backup.createdAt.replace("T", " ").take(16), fontSize = 12.sp, color = Muted)
-                                    }
-                                    if (backup.format == "ZIP") {
-                                        TextButton(onClick = { onPreviewRestore(backup.id) }, enabled = !backupLoading) { Text("Validate & restore") }
-                                    }
-                                    TextButton(
-                                        onClick = { onDownload(backup.id) },
-                                        enabled = !backupLoading
-                                    ) { Text(if (downloadLoadingId == backup.id) "Preparing…" else "Download") }
-                                }
-                                HorizontalDivider(color = Line)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        item {
-            OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {
-                Text("Sign out")
-            }
-        }
-    }
-}
-
-@Composable
-private fun FarmUnavailableScreen(title: String, message: String) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(title, fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Forest)
-        Spacer(Modifier.height(8.dp))
-        Text(message, fontSize = 16.sp, color = Muted)
-    }
-}
-
-@Composable
-private fun SummaryTile(value: String, label: String, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        color = Color.White,
-        border = BorderStroke(1.dp, Line)
-    ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(value, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Forest)
-            Text(label, fontSize = 12.sp, color = Muted)
-        }
-    }
-}
-
-@Composable
-private fun FieldRecordRow(field: FarmFieldRecord, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(field.name, modifier = Modifier.weight(1f), fontSize = 16.sp, fontWeight = FontWeight.Medium)
-            val statusColor = if (field.syncStatus == "FAILED") Color(0xFFFFF3D6) else Leaf
-            Surface(shape = CircleShape, color = statusColor) {
-                Text(
-                    when (field.syncStatus) {
-                        "PENDING" -> "Pending sync"
-                        "FAILED" -> "Sync failed"
-                        "CONFLICT" -> "Conflict"
-                        else -> "Synced"
-                    },
-                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                    fontSize = 11.sp,
-                    color = if (field.syncStatus == "FAILED") Color(0xFFB14E36) else Forest
-                )
-            }
-        }
-        Text(
-            listOf(
-                field.area?.let { "${formatNumber(it)} ${field.areaUnit.orEmpty()}".trim() },
-                field.location.takeIf(String::isNotBlank)
-            ).filterNotNull().joinToString(" · ").ifBlank { "Field record" },
-            fontSize = 14.sp,
-            color = Muted
-        )
-        HorizontalDivider(color = Line)
-    }
-}
-
-@Composable
-private fun FarmEmptyState(
-    title: String,
-    message: String,
-    action: String?,
-    onAction: () -> Unit
-) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(title, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Ink)
-        Text(message, fontSize = 14.sp, color = Muted)
-        if (action != null) {
-            Button(onClick = onAction, modifier = Modifier.heightIn(min = 48.dp)) {
-                Text(action)
-            }
-        }
-    }
-}
-
-@Composable
-private fun FarmInlineError(message: String, onRetry: (() -> Unit)? = null) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = Color(0xFFFFF0EC),
-        border = BorderStroke(1.dp, Color(0xFFE6C5BC)),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(message, color = Color(0xFF8F3E2C), fontSize = 14.sp)
-            if (onRetry != null) TextButton(onClick = onRetry) { Text("Try again") }
-        }
-    }
-}
-
-@Composable
-private fun FarmPermissionMessage(message: String) {
-    Surface(shape = RoundedCornerShape(12.dp), color = Color(0xFFFFF3D6), modifier = Modifier.fillMaxWidth()) {
-        Text(message, modifier = Modifier.padding(14.dp), fontSize = 14.sp, color = Ink)
-    }
-}
-
-@Composable
-private fun FarmLoadingScreen(message: String) {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        CircularProgressIndicator(color = Forest)
-        Text(message, color = Muted, fontSize = 14.sp)
-    }
-}
-
-@Composable
-private fun FarmErrorScreen(title: String, message: String, onRetry: () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(title, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, color = Forest)
-        Spacer(Modifier.height(8.dp))
-        Text(message, fontSize = 14.sp, color = Muted)
-        Spacer(Modifier.height(16.dp))
-        Button(onClick = onRetry, modifier = Modifier.heightIn(min = 52.dp)) {
-            Text("Try again")
-        }
-    }
-}
-
-@Composable
-internal fun PasswordResetScreen(
-    loading: Boolean,
-    error: String?,
-    onSave: (String) -> Unit
-) {
-    var password by rememberSaveable { mutableStateOf("") }
-    var confirmation by rememberSaveable { mutableStateOf("") }
-    var validationError by rememberSaveable { mutableStateOf<String?>(null) }
-
-    Column(
-        modifier = Modifier.fillMaxSize().imePadding().padding(24.dp),
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text("FARM FAMILY", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Green)
-        Spacer(Modifier.height(8.dp))
-        Text("Choose a new password", fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Forest)
-        Spacer(Modifier.height(8.dp))
-        Text("Use the password policy configured for your account.", fontSize = 14.sp, color = Muted)
-        Spacer(Modifier.height(20.dp))
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it; validationError = null },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("New password *") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
-        )
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(
-            value = confirmation,
-            onValueChange = { confirmation = it; validationError = null },
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Confirm password *") },
-            singleLine = true,
-            visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
-        )
-        val visibleError = validationError ?: error
-        if (visibleError != null) {
-            Spacer(Modifier.height(10.dp))
-            FarmInlineError(visibleError)
-        }
-        Spacer(Modifier.height(20.dp))
-        Button(
-            onClick = {
-                validationError = when {
-                    password.isBlank() -> "Enter a new password."
-                    password != confirmation -> "Passwords do not match."
-                    else -> null
-                }
-                if (validationError == null) onSave(password)
-            },
-            enabled = !loading,
-            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
-        ) {
-            if (loading) {
-                CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp)
-            } else {
-                Text("Save new password")
-            }
-        }
-    }
-}
-
-private fun formatNumber(number: Double): String =
-    if (number % 1.0 == 0.0) number.toLong().toString() else number.toString()

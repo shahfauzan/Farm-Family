@@ -21,6 +21,7 @@ backend/supabase/.branches/
 backend/supabase/.temp/
 
 frontend/.gradle/
+frontend/.kotlin/
 frontend/local.properties
 frontend/.externalNativeBuild/
 frontend/.cxx/
