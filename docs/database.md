@@ -12,10 +12,11 @@ Migrations live in `backend/supabase/migrations/` and use timestamped, chronolog
 - `202611140002_secure_operations.sql`
 - `202611140003_weather_quota.sql`
 - `202611140004_unit_safe_harvest_reports.sql`
+- `202611140005_finance_currency_validation.sql`
 
 Do not edit, delete, rename, reorder, squash, or manually mark existing migrations as applied. Add new schema changes as new timestamped migrations.
 
-The CI embedded test applies all four migrations to PGlite with mocked Supabase Auth/Storage dependencies. This catches many SQL and contract regressions, but does not prove behavior on hosted Supabase. Use the local Supabase stack and `supabase test db` for deeper checks.
+The CI embedded test applies all five migrations to PGlite with mocked Supabase Auth/Storage dependencies. This catches many SQL and contract regressions, but does not prove behavior on hosted Supabase. Use the local Supabase stack and `supabase test db` for deeper checks.
 
 ## Security
 

@@ -1,6 +1,8 @@
 package com.farmfamily.app
 
 import android.os.Handler
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,6 +38,7 @@ import androidx.compose.material.icons.filled.Landscape
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -64,6 +67,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -114,7 +118,18 @@ internal fun AuthenticatedFarmApp(
     var fieldDraftId by rememberSaveable { mutableStateOf("") }
     var destination by rememberSaveable { mutableStateOf(FarmDestination.HOME.name) }
     var toast by remember { mutableStateOf<String?>(null) }
+    var aiQuestion by rememberSaveable { mutableStateOf("") }
+    var aiAnswer by remember { mutableStateOf<FarmAiAnswer?>(null) }
+    var aiLoading by remember { mutableStateOf(false) }
+    var aiError by remember { mutableStateOf<String?>(null) }
+    var backups by remember { mutableStateOf<List<BackupRecord>?>(null) }
+    var backupLoading by remember { mutableStateOf(false) }
+    var backupError by remember { mutableStateOf<String?>(null) }
+    var backupMessage by remember { mutableStateOf<String?>(null) }
+    var restorePreview by remember { mutableStateOf<org.json.JSONObject?>(null) }
+    var downloadLoadingId by remember { mutableStateOf<String?>(null) }
     val snackbarHost = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     fun reloadFamilies() {
         familyLoading = true
@@ -262,6 +277,101 @@ internal fun AuthenticatedFarmApp(
         fieldDraftId = UUID.randomUUID().toString()
         saveError = null
         isAddingField = true
+    }
+
+    fun askAi(question: String) {
+        aiLoading = true
+        aiError = null
+        executor.execute {
+            try {
+                val answer = repository.askFarmAi(
+                    accessToken = session.accessToken,
+                    familyId = requireNotNull(selectedFamily).id,
+                    question = question
+                )
+                mainHandler.post { aiAnswer = answer; aiLoading = false }
+            } catch (error: Exception) {
+                mainHandler.post { aiError = error.message ?: "Farm AI is unavailable."; aiLoading = false }
+            }
+        }
+    }
+
+    fun loadBackups(familyId: String) {
+        backupLoading = true
+        backupError = null
+        executor.execute {
+            try {
+                val result = repository.loadBackups(session.accessToken, familyId)
+                mainHandler.post { backups = result; backupLoading = false }
+            } catch (error: Exception) {
+                mainHandler.post { backupError = error.message ?: "Backups could not be loaded."; backupLoading = false }
+            }
+        }
+    }
+
+    fun exportBackup(familyId: String, format: String) {
+        backupLoading = true
+        backupError = null
+        backupMessage = null
+        executor.execute {
+            try {
+                val result = repository.exportBackup(session.accessToken, familyId, format)
+                val updated = repository.loadBackups(session.accessToken, familyId)
+                mainHandler.post { backupMessage = result; backups = updated; backupLoading = false }
+            } catch (error: Exception) {
+                mainHandler.post { backupError = error.message ?: "Backup export failed."; backupLoading = false }
+            }
+        }
+    }
+
+    fun previewBackup(backupId: String) {
+        backupLoading = true
+        backupError = null
+        executor.execute {
+            try {
+                val result = repository.previewRestore(session.accessToken, backupId)
+                mainHandler.post { restorePreview = result; backupLoading = false }
+            } catch (error: Exception) {
+                mainHandler.post { backupError = error.message ?: "Backup validation failed."; backupLoading = false }
+            }
+        }
+    }
+
+    fun confirmBackupRestore(importId: String, familyId: String) {
+        backupLoading = true
+        backupError = null
+        executor.execute {
+            try {
+                repository.confirmRestore(session.accessToken, importId)
+                val updated = repository.loadBackups(session.accessToken, familyId)
+                mainHandler.post {
+                    restorePreview = null
+                    backupMessage = "Backup restored. Existing matching records were merged."
+                    backups = updated
+                    backupLoading = false
+                    reloadRecords(requireNotNull(selectedFamily))
+                }
+            } catch (error: Exception) {
+                mainHandler.post { backupError = error.message ?: "Restore failed. No success was reported."; backupLoading = false }
+            }
+        }
+    }
+
+    fun downloadBackup(backupId: String) {
+        downloadLoadingId = backupId
+        backupError = null
+        executor.execute {
+            try {
+                val url = repository.backupDownloadUrl(session.accessToken, backupId)
+                mainHandler.post {
+                    downloadLoadingId = null
+                    runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
+                        .onFailure { backupError = "The signed download link was created, but no browser could open it." }
+                }
+            } catch (error: Exception) {
+                mainHandler.post { downloadLoadingId = null; backupError = error.message ?: "Backup download could not be prepared." }
+            }
+        }
     }
 
     LaunchedEffect(session.userId, session.accessToken) {
@@ -420,14 +530,56 @@ internal fun AuthenticatedFarmApp(
                         error = reportError,
                         onRetry = { reloadReport(family) }
                     )
-                    FarmDestination.AI -> FarmUnavailableScreen(
-                        title = "Your farm, explained",
-                        message = "Farm AI is not connected yet. No generated answers are shown as family facts."
+                    FarmDestination.AI -> FarmAiScreen(
+                        question = aiQuestion,
+                        answer = aiAnswer,
+                        loading = aiLoading,
+                        error = aiError,
+                        onQuestionChange = { aiQuestion = it },
+                        onAsk = { askAi(aiQuestion) }
                     )
-                    FarmDestination.MORE -> FarmMoreScreen(family, onSignOut)
+                    FarmDestination.MORE -> FarmMoreScreen(
+                        family = family,
+                        backups = backups,
+                        backupLoading = backupLoading,
+                        downloadLoadingId = downloadLoadingId,
+                        backupError = backupError,
+                        backupMessage = backupMessage,
+                        onLoadBackups = { loadBackups(family.id) },
+                        onExport = { exportBackup(family.id, it) },
+                        onDownload = ::downloadBackup,
+                        onPreviewRestore = ::previewBackup,
+                        onSignOut = onSignOut
+                    )
                 }
             }
         }
+    }
+    restorePreview?.let { preview ->
+        val counts = preview.optJSONObject("counts")
+        AlertDialog(
+            onDismissRequest = { if (!backupLoading) restorePreview = null },
+            title = { Text("Review backup restore") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("The backup has been validated. Confirming merges records with matching IDs; records absent from the backup are kept.")
+                    counts?.let { obj ->
+                        (0 until obj.length()).forEach { index ->
+                            val key = obj.names()?.optString(index).orEmpty()
+                            Text("$key · ${obj.opt(key)}", style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                    backupError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = !backupLoading && preview.optString("import_id").isNotBlank(),
+                    onClick = { confirmBackupRestore(preview.optString("import_id"), family.id) }
+                ) { Text(if (backupLoading) "Restoring…" else "Confirm restore") }
+            },
+            dismissButton = { TextButton(onClick = { restorePreview = null }) { Text("Cancel") } }
+        )
     }
 }
 
@@ -1013,7 +1165,77 @@ private fun ReportValueRow(label: String, value: String) {
 }
 
 @Composable
-private fun FarmMoreScreen(family: FamilyMembership, onSignOut: () -> Unit) {
+private fun FarmAiScreen(
+    question: String,
+    answer: FarmAiAnswer?,
+    loading: Boolean,
+    error: String?,
+    onQuestionChange: (String) -> Unit,
+    onAsk: () -> Unit
+) {
+    LazyColumn(
+        contentPadding = PaddingValues(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Text("Your farm, explained", fontSize = 24.sp, fontWeight = FontWeight.SemiBold, color = Forest)
+            Text("Ask about records saved by your family. Answers use authorized, read-only farm data.", color = Muted)
+        }
+        item {
+            OutlinedTextField(
+                value = question,
+                onValueChange = onQuestionChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Ask a question") },
+                placeholder = { Text("How much did we spend this year?") },
+                minLines = 3,
+                maxLines = 5,
+                enabled = !loading
+            )
+        }
+        item {
+            Button(onClick = onAsk, enabled = !loading && question.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+                if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                else Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(if (loading) "Checking family records…" else "Ask about farm records")
+            }
+        }
+        if (error != null) item { FarmInlineError(error) }
+        answer?.let { result ->
+            item {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = Color.White,
+                    border = BorderStroke(1.dp, Line),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("Based on family records", fontWeight = FontWeight.SemiBold, color = Forest)
+                        Text(result.explanation, color = Ink)
+                        Text("${result.records} supporting record${if (result.records == 1) "" else "s"}", fontSize = 12.sp, color = Muted)
+                    }
+                }
+            }
+        }
+        item { Text("Farm AI can summarize and search records. It cannot create, edit, or delete them.", fontSize = 12.sp, color = Muted) }
+    }
+}
+
+@Composable
+private fun FarmMoreScreen(
+    family: FamilyMembership,
+    backups: List<BackupRecord>?,
+    backupLoading: Boolean,
+    downloadLoadingId: String?,
+    backupError: String?,
+    backupMessage: String?,
+    onLoadBackups: () -> Unit,
+    onExport: (String) -> Unit,
+    onDownload: (String) -> Unit,
+    onPreviewRestore: (String) -> Unit,
+    onSignOut: () -> Unit
+) {
     LazyColumn(
         contentPadding = PaddingValues(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -1040,6 +1262,49 @@ private fun FarmMoreScreen(family: FamilyMembership, onSignOut: () -> Unit) {
             FarmPermissionMessage(
                 "Only family members with the required permissions can change family records."
             )
+        }
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Backup & restore", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, color = Forest)
+                Text(
+                    if (family.role == "OWNER") "Create a family export or review a ZIP backup before restoring it." else "Backups are available to the family owner.",
+                    fontSize = 14.sp,
+                    color = Muted
+                )
+                if (family.role == "OWNER") {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("CSV", "XLSX", "PDF", "ZIP").forEach { format ->
+                            OutlinedButton(onClick = { onExport(format) }, enabled = !backupLoading) { Text(format) }
+                        }
+                    }
+                    OutlinedButton(onClick = onLoadBackups, enabled = !backupLoading, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (backupLoading) "Loading backups…" else "Show recent backups")
+                    }
+                    backupMessage?.let { Text(it, color = Forest, fontSize = 13.sp) }
+                    backupError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp) }
+                    backups?.let { items ->
+                        if (items.isEmpty()) Text("No completed backups yet.", color = Muted, fontSize = 14.sp)
+                        items.forEach { backup ->
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("${backup.format} backup", fontWeight = FontWeight.Medium, color = Ink)
+                                        Text(backup.createdAt.replace("T", " ").take(16), fontSize = 12.sp, color = Muted)
+                                    }
+                                    if (backup.format == "ZIP") {
+                                        TextButton(onClick = { onPreviewRestore(backup.id) }, enabled = !backupLoading) { Text("Validate & restore") }
+                                    }
+                                    TextButton(
+                                        onClick = { onDownload(backup.id) },
+                                        enabled = !backupLoading
+                                    ) { Text(if (downloadLoadingId == backup.id) "Preparing…" else "Download") }
+                                }
+                                HorizontalDivider(color = Line)
+                            }
+                        }
+                    }
+                }
+            }
         }
         item {
             OutlinedButton(onClick = onSignOut, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) {

@@ -6,11 +6,11 @@ Farm Family is a family-oriented farm management application. This repository br
 
 ## Features
 
-- Android app preview for farm records, fields, expenses, reports, family activity, settings, and AI assistance.
+- Android Compose frontend with Supabase authentication, family onboarding, and online field records.
 - Supabase backend foundation for family accounts, farm records, invitations, synchronization, reports, backups/imports, AI, and weather.
 - PostgreSQL migrations with row-level security and database-side operations.
 
-The Android app currently uses mock, in-memory data. Its Supabase API contract is documented, but authentication, synchronization, and backend calls are not integrated yet.
+The Android frontend implements Supabase email/password authentication, family create/join, family membership lookup, and server-backed field listing/creation. The Figma blueprint is the visual source for the implemented auth, family setup, home, and field flows. Room/offline sync and the remaining product modules are still in progress. Legacy mock screens are not the authenticated production path.
 
 ## Architecture
 

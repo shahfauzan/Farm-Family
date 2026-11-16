@@ -56,6 +56,10 @@ data class CropSeasonSummary(
     val purpose: String
 )
 
+data class FarmAiAnswer(val explanation: String, val intent: String, val records: Int)
+
+data class BackupRecord(val id: String, val format: String, val createdAt: String)
+
 class SupabaseFarmRepository(context: android.content.Context) {
     private val baseUrl = BuildConfig.SUPABASE_URL.trimEnd('/')
     private val anonKey = BuildConfig.SUPABASE_ANON_KEY
@@ -214,6 +218,57 @@ class SupabaseFarmRepository(context: android.content.Context) {
             harvestQuantity = numberOrNull("harvest_quantity")
         )
     }
+
+    fun askFarmAi(accessToken: String, familyId: String, question: String): FarmAiAnswer {
+        require(question.isNotBlank()) { "Enter a question about your family's farm records." }
+        require(question.length <= 2000) { "Keep your question under 2,000 characters." }
+        val response = JSONObject(request(
+            "functions/v1/ai-assistant", "POST", accessToken,
+            JSONObject().put("family_id", familyId).put("question", question.trim())
+        ))
+        return FarmAiAnswer(
+            explanation = response.optString("explanation").ifBlank { "No explanation was returned." },
+            intent = response.optString("intent"),
+            records = response.optJSONArray("data")?.length() ?: 0
+        )
+    }
+
+    fun exportBackup(accessToken: String, familyId: String, format: String): String {
+        require(format in setOf("CSV", "XLSX", "PDF", "ZIP")) { "Choose a supported export format." }
+        val response = JSONObject(request(
+            "functions/v1/family-backups", "POST", accessToken,
+            JSONObject().put("action", "export").put("family_id", familyId).put("format", format)
+        ))
+        return "${response.optString("format", format)} backup created · ${response.optInt("record_count")} records"
+    }
+
+    fun loadBackups(accessToken: String, familyId: String): List<BackupRecord> {
+        val rows = JSONArray(request(
+            "rest/v1/backup_records?select=id,format,created_at,status&family_id=eq.$familyId&status=eq.COMPLETED&order=created_at.desc&limit=30",
+            "GET", accessToken
+        ))
+        return (0 until rows.length()).map { index -> rows.getJSONObject(index) }.map {
+            BackupRecord(it.getString("id"), it.optString("format"), it.optString("created_at"))
+        }
+    }
+
+    fun backupDownloadUrl(accessToken: String, backupId: String): String {
+        val response = JSONObject(request(
+            "functions/v1/family-backups", "POST", accessToken,
+            JSONObject().put("action", "download").put("backup_id", backupId)
+        ))
+        return response.getString("url")
+    }
+
+    fun previewRestore(accessToken: String, backupId: String): JSONObject = JSONObject(request(
+        "functions/v1/family-imports", "POST", accessToken,
+        JSONObject().put("action", "preview").put("backup_id", backupId)
+    ))
+
+    fun confirmRestore(accessToken: String, importId: String): JSONObject = JSONObject(request(
+        "functions/v1/family-imports", "POST", accessToken,
+        JSONObject().put("action", "confirm").put("import_id", importId)
+    ))
 
     fun createField(
         accessToken: String,

@@ -118,4 +118,4 @@ Edge endpoints return `{ "error": { "code": "...", "message": "..." } }`; Postgr
 
 ## Android integration status
 
-The sibling `../frontend` Compose project is a UI preview with an in-memory mock repository and no Supabase client, DTOs, authentication or sync engine. This document describes the proposed contract; end-to-end Android integration has not been performed.
+The sibling `../frontend` Android app uses Supabase Auth and the existing family/field contracts. It caches field records in local SQLite and queues field inserts for retry on refresh; other farm-data modules, background synchronization, and conflict resolution are not integrated. Live Supabase and on-device end-to-end behavior have not been verified.
