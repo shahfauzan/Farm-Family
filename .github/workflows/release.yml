@@ -92,6 +92,21 @@ jobs:
       - name: Install Android SDK packages
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
+      - name: Validate Android client configuration
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        shell: bash
+        run: |
+          if [[ -z "$SUPABASE_URL" || -z "$SUPABASE_ANON_KEY" ]]; then
+            echo "::error::Configure SUPABASE_URL and SUPABASE_ANON_KEY as production environment variables."
+            exit 1
+          fi
+          if [[ "$SUPABASE_URL" != https://* ]]; then
+            echo "::error::SUPABASE_URL must use HTTPS."
+            exit 1
+          fi
+
       - name: Configure release signing
         env:
           ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
@@ -107,7 +122,9 @@ jobs:
             fi
           done
           keystore="$RUNNER_TEMP/farm-family-release.jks"
+          umask 077
           printf '%s' "$ANDROID_RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+          chmod 600 "$keystore"
           echo "FARM_FAMILY_RELEASE_STORE_FILE=$keystore" >> "$GITHUB_ENV"
           echo "FARM_FAMILY_RELEASE_STORE_PASSWORD=$ANDROID_RELEASE_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           echo "FARM_FAMILY_RELEASE_KEY_ALIAS=$ANDROID_RELEASE_KEY_ALIAS" >> "$GITHUB_ENV"
@@ -115,7 +132,14 @@ jobs:
 
       - name: Build release APK
         working-directory: frontend
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
         run: gradle --no-daemon assembleRelease
+
+      - name: Remove temporary release keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/farm-family-release.jks"
 
       - name: Verify Release APK signature
         run: |
