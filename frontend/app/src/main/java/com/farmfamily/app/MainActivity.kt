@@ -1,6 +1,10 @@
 package com.farmfamily.app
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.BorderStroke
@@ -16,9 +20,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -51,6 +58,7 @@ import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -75,10 +83,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,31 +97,46 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import java.util.concurrent.Executors
 
 class MainActivity : ComponentActivity() {
+    private val authCallbackUri = mutableStateOf<Uri?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        authCallbackUri.value = intent?.data
+        val authRepository = SupabaseAuthRepository(applicationContext)
+        val farmRepository = SupabaseFarmRepository(applicationContext)
         setContent {
             FarmFamilyTheme {
-                FarmFamilyApp()
+                FarmFamilyApp(authRepository, farmRepository, authCallbackUri)
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        authCallbackUri.value = intent.data
+    }
 }
 
-private val Forest = Color(0xFF174B38)
-private val ForestSoft = Color(0xFF2A5F48)
-private val Green = Color(0xFF377B55)
-private val Leaf = Color(0xFFE6F1E8)
-private val Cream = Color(0xFFFAF8F1)
-private val Ink = Color(0xFF1C2B25)
-private val Muted = Color(0xFF68746B)
-private val Line = Color(0xFFE8ECE5)
-private val Gold = Color(0xFFE6BA63)
+internal val Forest = Color(0xFF174A35)
+internal val ForestSoft = Color(0xFF2F6B4F)
+internal val Green = Color(0xFF2F6B4F)
+internal val Leaf = Color(0xFFE7F1EA)
+internal val Cream = Color(0xFFF8F6EF)
+internal val Ink = Color(0xFF1F2924)
+internal val Muted = Color(0xFF68736D)
+internal val Line = Color(0xFFDCE3DE)
+internal val Gold = Color(0xFFE6BA63)
 private val Warning = Color(0xFFFFF3D6)
 private val ErrorColor = Color(0xFFB14E36)
 
@@ -129,10 +155,10 @@ private enum class MainTab { HOME, RECORDS, REPORTS, AI, MORE }
 enum class SyncStatus { PENDING, SYNCING, SYNCED, FAILED, CONFLICT }
 
 data class FamilyContext(
-    val familyId: String = "demo-family",
-    val familyName: String = "Sharma Family",
-    val userName: String = "Anil Sharma",
-    val userEmail: String = "anil@farmfamily.app"
+    val familyId: String = "",
+    val familyName: String = "Family not connected",
+    val userName: String = "",
+    val userEmail: String = ""
 )
 
 data class FarmField(
@@ -279,6 +305,7 @@ private object Strings {
 
 @Composable
 private fun FarmFamilyTheme(content: @Composable () -> Unit) {
+    val baseTypography = androidx.compose.material3.Typography()
     val colors = lightColorScheme(
         primary = Forest,
         onPrimary = Color.White,
@@ -292,58 +319,233 @@ private fun FarmFamilyTheme(content: @Composable () -> Unit) {
         outline = Line,
         tertiary = Gold
     )
-    MaterialTheme(colorScheme = colors, typography = androidx.compose.material3.Typography(), content = content)
+    val typography = baseTypography.copy(
+        headlineSmall = baseTypography.headlineSmall.copy(
+            fontFamily = FontFamily.SansSerif,
+            fontSize = 24.sp
+        ),
+        titleMedium = baseTypography.titleMedium.copy(
+            fontFamily = FontFamily.SansSerif,
+            fontSize = 18.sp
+        ),
+        bodyLarge = baseTypography.bodyLarge.copy(
+            fontFamily = FontFamily.SansSerif,
+            fontSize = 16.sp
+        ),
+        bodyMedium = baseTypography.bodyMedium.copy(
+            fontFamily = FontFamily.SansSerif,
+            fontSize = 14.sp
+        ),
+        labelMedium = baseTypography.labelMedium.copy(
+            fontFamily = FontFamily.SansSerif,
+            fontSize = 12.sp
+        )
+    )
+    MaterialTheme(colorScheme = colors, typography = typography, content = content)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun FarmFamilyApp() {
+private fun FarmFamilyApp(
+    authRepository: SupabaseAuthRepository,
+    farmRepository: SupabaseFarmRepository,
+    callbackUri: MutableState<Uri?>
+) {
+    val executor = remember { Executors.newSingleThreadExecutor() }
+    val mainHandler = remember { Handler(Looper.getMainLooper()) }
+    DisposableEffect(executor) {
+        onDispose { executor.shutdown() }
+    }
+
+    var authState by remember { mutableStateOf(AuthState.SESSION_RESTORING) }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var authError by remember { mutableStateOf<String?>(null) }
+    var currentSession by remember { mutableStateOf<AuthSession?>(null) }
+    var passwordRecovery by remember { mutableStateOf(false) }
+    LaunchedEffect(authRepository) {
+        if (callbackUri.value != null) return@LaunchedEffect
+        executor.execute {
+            try {
+                val session = authRepository.restoreSession()
+                mainHandler.post {
+                    authState = if (session == null) AuthState.LOGGED_OUT else AuthState.LOGGED_IN
+                    currentSession = session
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    authError = error.message ?: "Could not restore your sign-in session."
+                    authState = AuthState.AUTH_ERROR
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(callbackUri.value) {
+        val uri = callbackUri.value ?: return@LaunchedEffect
+        executor.execute {
+            try {
+                val callback = authRepository.handleAuthCallback(uri)
+                mainHandler.post {
+                    currentSession = callback.session
+                    passwordRecovery = callback.passwordRecovery
+                    authState = AuthState.LOGGED_IN
+                    authError = null
+                    callbackUri.value = null
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    authError = error.message ?: "The email link could not be verified."
+                    authState = AuthState.AUTH_ERROR
+                    callbackUri.value = null
+                }
+            }
+        }
+    }
+
+    fun submitAuth(action: () -> AuthSession?) {
+        authError = null
+        authState = AuthState.LOGGING_IN
+        executor.execute {
+            try {
+                val session = action()
+                mainHandler.post {
+                    if (session == null) {
+                        authState = AuthState.LOGGED_OUT
+                        authError = "Check your email to confirm your account, then sign in."
+                    } else {
+                        currentSession = session
+                        authState = AuthState.LOGGED_IN
+                    }
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    authError = error.message ?: "Authentication failed. Try again."
+                    authState = AuthState.AUTH_ERROR
+                }
+            }
+        }
+    }
+
+    fun signOut() {
+        authState = AuthState.LOGGING_OUT
+        executor.execute {
+            try {
+                authRepository.signOut()
+                mainHandler.post {
+                    currentSession = null
+                    authState = AuthState.LOGGED_OUT
+                }
+            } catch (error: Exception) {
+                mainHandler.post {
+                    currentSession = null
+                    authError = error.message ?: "Could not confirm sign-out with the server."
+                    authState = AuthState.AUTH_ERROR
+                }
+            }
+        }
+    }
+
+    if (authState == AuthState.SESSION_RESTORING ||
+        authState == AuthState.LOGGING_IN ||
+        authState == AuthState.LOGGING_OUT
+    ) {
+        AuthProgressScreen()
+        return
+    }
+
+    if (authState != AuthState.LOGGED_IN) {
+        LoginScreen(
+            onLogin = { submitAuth { authRepository.signIn(email, password) } },
+            onSignUp = { displayName ->
+                submitAuth { authRepository.signUp(email, password, displayName) }
+            },
+            onRecover = {
+                authError = null
+                authState = AuthState.LOGGING_IN
+                executor.execute {
+                    try {
+                        authRepository.sendPasswordRecovery(email)
+                        mainHandler.post {
+                            authError = "Password recovery instructions were sent if the account exists."
+                            authState = AuthState.LOGGED_OUT
+                        }
+                    } catch (error: Exception) {
+                        mainHandler.post {
+                            authError = error.message ?: "Could not start password recovery."
+                            authState = AuthState.AUTH_ERROR
+                        }
+                    }
+                }
+            },
+            email = email,
+            password = password,
+            onEmailChange = { email = it },
+            onPasswordChange = { password = it },
+            message = authError
+        )
+        return
+    }
+
+    if (passwordRecovery) {
+        val recoverySession = currentSession
+        PasswordResetScreen(
+            loading = authState == AuthState.LOGGING_IN,
+            error = authError,
+            onSave = { newPassword ->
+                authState = AuthState.LOGGING_IN
+                authError = null
+                executor.execute {
+                    try {
+                        authRepository.updatePassword(
+                            requireNotNull(recoverySession).accessToken,
+                            newPassword
+                        )
+                        mainHandler.post {
+                            passwordRecovery = false
+                            authState = AuthState.LOGGED_IN
+                            authError = null
+                        }
+                    } catch (error: Exception) {
+                        mainHandler.post {
+                            authError = error.message ?: "Password could not be updated."
+                            authState = AuthState.LOGGED_IN
+                        }
+                    }
+                }
+            }
+        )
+        return
+    }
+
+    val activeSession = currentSession
+    if (activeSession == null) {
+        AuthProgressScreen()
+        return
+    }
+    AuthenticatedFarmApp(
+        session = activeSession,
+        repository = farmRepository,
+        executor = executor,
+        mainHandler = mainHandler,
+        onSignOut = ::signOut
+    )
+    return
+
     val repo = remember { InMemoryFarmRepository() }
     val family = repo.familyContext()
     val scope = remember { SnackbarHostState() }
-    var authState by remember { mutableStateOf(AuthState.SESSION_RESTORING) }
-    var email by remember { mutableStateOf("anil@farmfamily.app") }
-    var password by remember { mutableStateOf("F@rmFamily2026") }
     var route by remember { mutableStateOf<String?>(null) }
     var selectedTab by remember { mutableStateOf(MainTab.HOME) }
     var offline by remember { mutableStateOf(false) }
     var banner by remember { mutableStateOf<String?>(null) }
     var showQuickAdd by remember { mutableStateOf(false) }
 
-    LaunchedEffect(authState) {
-        if (authState == AuthState.SESSION_RESTORING) {
-            authState = AuthState.LOGGED_IN
-        }
-    }
-
     LaunchedEffect(banner) {
         banner?.let {
             scope.showSnackbar(it)
             banner = null
         }
-    }
-
-    if (authState == AuthState.LOGGED_OUT || authState == AuthState.AUTH_ERROR || authState == AuthState.SESSION_EXPIRED) {
-        LoginScreen(
-            onLogin = {
-                authState = AuthState.LOGGING_IN
-                if (email.isNotBlank() && password.isNotBlank()) {
-                    authState = AuthState.LOGGED_IN
-                } else {
-                    authState = AuthState.AUTH_ERROR
-                }
-            },
-            onDemoLogin = {
-                authState = AuthState.LOGGED_IN
-            },
-            email = email,
-            password = password,
-            onEmailChange = { email = it },
-            onPasswordChange = { password = it },
-            error = authState == AuthState.AUTH_ERROR,
-            showDebugShortcut = false
-        )
-        return
     }
 
     Scaffold(
@@ -442,7 +644,7 @@ private fun FarmFamilyApp() {
                     MainTab.RECORDS -> RecordsScreen(repo, onRoute = { route = it }, onQuickAdd = { showQuickAdd = true })
                     MainTab.REPORTS -> ReportsScreen(repo)
                     MainTab.AI -> AiScreen(repo)
-                    MainTab.MORE -> MoreScreen(onRoute = { route = it }, onToggleOffline = { offline = !offline }, onLogout = { authState = AuthState.LOGGED_OUT })
+                    MainTab.MORE -> MoreScreen(onRoute = { route = it }, onToggleOffline = { offline = !offline }, onLogout = ::signOut)
                 }
             }
         }
@@ -464,18 +666,86 @@ private fun FarmFamilyApp() {
 }
 
 @Composable
+private fun AuthenticatedSetupScreen(email: String, onSignOut: () -> Unit) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Cream
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(Strings.appName, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Forest)
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "Account connected",
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Bold
+            )
+            if (email.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(email, color = Muted)
+            }
+            Spacer(Modifier.height(16.dp))
+            Text(
+                "Family setup, farm records, and synchronization are not connected in this build. Demo records are intentionally hidden so they cannot be mistaken for your family's data.",
+                color = Muted
+            )
+            Spacer(Modifier.height(24.dp))
+            OutlinedButton(
+                onClick = onSignOut,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+            ) {
+                Text("Sign out")
+            }
+        }
+    }
+}
+
+@Composable
+private fun AuthProgressScreen() {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Cream
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            CircularProgressIndicator(color = Forest)
+            Spacer(Modifier.height(16.dp))
+            Text("Connecting to your family account...", color = Muted)
+        }
+    }
+}
+
+@Composable
 private fun LoginScreen(
     onLogin: () -> Unit,
-    onDemoLogin: () -> Unit,
+    onSignUp: (String) -> Unit,
+    onRecover: () -> Unit,
     email: String,
     password: String,
     onEmailChange: (String) -> Unit,
     onPasswordChange: (String) -> Unit,
-    error: Boolean,
-    showDebugShortcut: Boolean
+    message: String?
 ) {
+    var createAccount by rememberSaveable { mutableStateOf(false) }
+    var fullName by rememberSaveable { mutableStateOf("") }
+    var confirmPassword by rememberSaveable { mutableStateOf("") }
+    var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    var formError by rememberSaveable { mutableStateOf<String?>(null) }
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .imePadding()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Spacer(modifier = Modifier.height(18.dp))
@@ -492,36 +762,75 @@ private fun LoginScreen(
                 modifier = Modifier.size(72.dp)
             )
         }
-        Text(Strings.loginTitle, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Forest)
-        Text("Use your authenticated family account to access farm records.", color = Muted)
+        Text(
+            if (createAccount) "Start growing together." else "Welcome back.",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = Forest
+        )
+        Text(
+            if (createAccount) "Create your personal account. You'll choose a family next."
+            else "Your family's farm, in one place.",
+            color = Muted
+        )
 
+        if (createAccount) {
+            OutlinedTextField(
+                value = fullName,
+                onValueChange = { fullName = it; formError = null },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Full name *") },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp)
+            )
+        }
         OutlinedTextField(
             value = email,
             onValueChange = onEmailChange,
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Email") },
+            label = { Text("Email *") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-            shape = RoundedCornerShape(16.dp)
+            shape = RoundedCornerShape(12.dp)
         )
         OutlinedTextField(
             value = password,
-            onValueChange = onPasswordChange,
+            onValueChange = { onPasswordChange(it); formError = null },
             modifier = Modifier.fillMaxWidth(),
-            label = { Text("Password") },
+            label = { Text("Password *") },
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            shape = RoundedCornerShape(16.dp)
+            visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+            trailingIcon = {
+                TextButton(onClick = { passwordVisible = !passwordVisible }) {
+                    Text(if (passwordVisible) "Hide" else "Show")
+                }
+            },
+            shape = RoundedCornerShape(12.dp)
         )
 
-        if (error) {
+        if (createAccount) {
+            OutlinedTextField(
+                value = confirmPassword,
+                onValueChange = { confirmPassword = it; formError = null },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Confirm password *") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                visualTransformation = PasswordVisualTransformation(),
+                shape = RoundedCornerShape(12.dp)
+            )
+        }
+
+        val visibleMessage = formError ?: message
+        if (visibleMessage != null) {
             Surface(
                 color = Warning,
                 shape = RoundedCornerShape(12.dp),
                 border = BorderStroke(1.dp, Gold)
             ) {
                 Text(
-                    text = "Authentication failed. Enter a valid email and password.",
+                    text = visibleMessage,
                     modifier = Modifier.padding(12.dp),
                     color = ErrorColor,
                     fontSize = 13.sp
@@ -530,20 +839,28 @@ private fun LoginScreen(
         }
 
         Button(
-            onClick = onLogin,
+            onClick = {
+                formError = when {
+                    createAccount && fullName.isBlank() -> "Enter your full name."
+                    createAccount && password != confirmPassword -> "Passwords do not match."
+                    else -> null
+                }
+                if (formError == null) {
+                    if (createAccount) onSignUp(fullName.trim()) else onLogin()
+                }
+            },
             modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
         ) {
-            Text("Sign in")
+            Text(if (createAccount) "Create account" else "Sign in")
         }
 
-        if (showDebugShortcut) {
-            OutlinedButton(
-                onClick = onDemoLogin,
-                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
-            ) {
-                Text("Developer demo access")
-            }
+        TextButton(onClick = {
+            createAccount = !createAccount
+            formError = null
+        }) {
+            Text(if (createAccount) "Already have an account? Sign in" else "Create an account")
         }
+        if (!createAccount) TextButton(onClick = onRecover) { Text("Forgot password?") }
 
         Surface(
             color = Color.White,
@@ -552,11 +869,10 @@ private fun LoginScreen(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(Modifier.padding(16.dp)) {
-                Text("Security", fontWeight = FontWeight.Bold, color = Forest)
                 Text(
-                    "Real family membership and authorization are fetched from the backend rather than demo identifiers.",
+                    "Email and password only. Your family's records stay private.",
                     color = Muted,
-                    fontSize = 12.sp
+                    fontSize = 14.sp
                 )
             }
         }
@@ -918,6 +1234,8 @@ private fun DetailRoute(route: String, repo: FarmRepository, onRoute: (String?) 
     when (route) {
         "Add Field" -> AddFieldScreen(onCancel = { onRoute(null) }, onSave = { field -> repo.addField(field); onRoute(null); onMessage("Field saved") })
         "Add Expense" -> AddExpenseScreen(onCancel = { onRoute(null) }, onSave = { expense -> repo.addExpense(expense); onRoute(null); onMessage("Expense saved") })
+        "Create Family" -> CreateFamilyScreen(onCancel = { onRoute(null) }, onCreate = { onRoute(null); onMessage("Family created") })
+        "Join Family" -> JoinFamilyScreen(onCancel = { onRoute(null) }, onJoin = { onRoute(null); onMessage("Invitation accepted") })
         "Fields" -> FieldListScreen(repo, onRoute)
         "Expenses" -> ExpenseListScreen(repo, onRoute)
         "Search" -> SearchScreen(repo)
@@ -1128,6 +1446,78 @@ private fun GenericListScreen(title: String, entries: List<Pair<String, String>>
                         if (secondary.isNotBlank()) Text(secondary, color = Muted, fontSize = 12.sp)
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CreateFamilyScreen(onCancel: () -> Unit, onCreate: () -> Unit) {
+    var familyName by remember { mutableStateOf("") }
+    var location by remember { mutableStateOf("") }
+    val farmTypes = listOf("Rice", "Mixed crop", "Vegetables", "Dairy", "Citrus")
+    var selectedFarmType by remember { mutableStateOf(farmTypes.first()) }
+
+    Column(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                Text("Create family", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Set up the family workspace and farm profile for your household.", color = Muted)
+            }
+            item { OutlinedTextField(value = familyName, onValueChange = { familyName = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Family name") }) }
+            item { OutlinedTextField(value = location, onValueChange = { location = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Farm location") }) }
+            item {
+                Text("Primary farm type", fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    farmTypes.forEach { option ->
+                        FilterChip(selected = selectedFarmType == option, onClick = { selectedFarmType = option }, label = { Text(option) })
+                    }
+                }
+            }
+        }
+        Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Cancel") }
+            Button(
+                onClick = onCreate,
+                enabled = familyName.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+            ) {
+                Text("Create")
+            }
+        }
+    }
+}
+
+@Composable
+private fun JoinFamilyScreen(onCancel: () -> Unit, onJoin: () -> Unit) {
+    var inviteCode by remember { mutableStateOf("") }
+    var displayName by remember { mutableStateOf("") }
+
+    Column(Modifier.fillMaxSize()) {
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            item {
+                Text("Join family", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text("Use an invitation code to join an existing farm family.", color = Muted)
+            }
+            item { OutlinedTextField(value = inviteCode, onValueChange = { inviteCode = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Invitation code") }) }
+            item { OutlinedTextField(value = displayName, onValueChange = { displayName = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Your name") }) }
+        }
+        Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Cancel") }
+            Button(
+                onClick = onJoin,
+                enabled = inviteCode.isNotBlank() && displayName.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)
+            ) {
+                Text("Join")
             }
         }
     }

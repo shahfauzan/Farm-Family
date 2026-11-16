@@ -1,8 +1,28 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
 }
+
+val localProperties = Properties().apply {
+    val propertiesFile = rootProject.file("local.properties")
+    if (propertiesFile.isFile) {
+        propertiesFile.inputStream().use { load(it) }
+    }
+}
+fun buildConfigValue(value: String): String =
+    "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
+
+val supabaseUrl = providers.environmentVariable("SUPABASE_URL")
+    .orElse(providers.gradleProperty("SUPABASE_URL"))
+    .orElse(localProperties.getProperty("SUPABASE_URL") ?: "")
+    .get()
+val supabaseAnonKey = providers.environmentVariable("SUPABASE_ANON_KEY")
+    .orElse(providers.gradleProperty("SUPABASE_ANON_KEY"))
+    .orElse(localProperties.getProperty("SUPABASE_ANON_KEY") ?: "")
+    .get()
 
 val releaseStoreFile = providers.environmentVariable("FARM_FAMILY_RELEASE_STORE_FILE").orNull
 val releaseStorePassword = providers.environmentVariable("FARM_FAMILY_RELEASE_STORE_PASSWORD").orNull
@@ -32,6 +52,8 @@ android {
         targetSdk = 36
         versionCode = 1
         versionName = "1.0.0"
+        buildConfigField("String", "SUPABASE_URL", buildConfigValue(supabaseUrl))
+        buildConfigField("String", "SUPABASE_ANON_KEY", buildConfigValue(supabaseAnonKey))
     }
 
     signingConfigs {
@@ -58,7 +80,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    buildFeatures { compose = true }
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 

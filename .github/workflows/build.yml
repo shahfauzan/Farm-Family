@@ -46,7 +46,8 @@ jobs:
         run: deno run --node-modules-dir=auto --allow-read supabase/tests/embedded_migrations.ts
 
   frontend:
-    name: Build Android frontend
+    name: Build Android debug frontend
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - name: Check out source
@@ -72,12 +73,52 @@ jobs:
         run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Build debug APK
-        if: github.event_name == 'pull_request'
         working-directory: frontend
         run: gradle --no-daemon assembleDebug
 
+  frontend-release:
+    name: Build signed Android release frontend
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Validate Supabase client configuration
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
+        shell: bash
+        run: |
+          if [[ -z "$SUPABASE_URL" || -z "$SUPABASE_ANON_KEY" ]]; then
+            echo "::error::Configure SUPABASE_URL and SUPABASE_ANON_KEY as repository Actions variables."
+            exit 1
+          fi
+          if [[ "$SUPABASE_URL" != https://* ]]; then
+            echo "::error::SUPABASE_URL must use HTTPS."
+            exit 1
+          fi
+
       - name: Configure release signing
-        if: github.event_name != 'pull_request'
         env:
           ANDROID_RELEASE_KEYSTORE_BASE64: ${{ secrets.ANDROID_RELEASE_KEYSTORE_BASE64 }}
           ANDROID_RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_RELEASE_KEYSTORE_PASSWORD }}
@@ -99,17 +140,17 @@ jobs:
           echo "FARM_FAMILY_RELEASE_KEY_PASSWORD=$ANDROID_RELEASE_KEY_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Build signed Release APK
-        if: github.event_name != 'pull_request'
         working-directory: frontend
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ vars.SUPABASE_ANON_KEY }}
         run: gradle --no-daemon assembleRelease
 
       - name: Verify Release APK signature
-        if: github.event_name != 'pull_request'
         run: |
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose frontend/app/build/outputs/apk/release/app-release.apk
 
       - name: Upload signed Release APK
-        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
           name: farm-family-release-apk

@@ -1,15 +1,27 @@
 # FARM FAMILY Android frontend
 
-A native Android frontend for FARM FAMILY built with Kotlin and Jetpack Compose. The app is structured around family-scoped data, offline-first repository flow, auth-aware state, and real backend-first operations rather than static demo-only screen logic.
+A native Android frontend for FARM FAMILY built with Kotlin and Jetpack Compose.
 
-## Current foundation
+## Implemented
 
-- Forest green + warm cream design system with standard Material 3 primitives
-- FARM FAMILY sprout-and-field brand mark used by the app header, sign-in screen, and adaptive launcher icon
-- Real app flow for login, home dashboard, records, reports, AI, more, settings, and sync states
-- Family-scoped state and repository model that is ready for Supabase-backed integration
-- Local-first repository abstraction with sync metadata and offline handling
-- Frontend contract documentation in [FRONTEND_CONTRACT.md](FRONTEND_CONTRACT.md)
+- Supabase email/password sign-in, sign-up, password recovery, and sign-out.
+- Session restore/refresh with tokens encrypted by Android Keystore.
+- Email confirmation and recovery deep links back into the app.
+- Family create/join and authorized family membership loading.
+- Figma-aligned home, family setup, and field list/create screens backed by Supabase.
+- Field creation is server-authorized and uses a stable local ID so an uncertain network response can be reconciled safely.
+- Family-scoped SQLite cache for fields, plus a durable insert queue that retries on refresh and distinguishes offline pending writes from server errors.
+
+## Supabase configuration
+
+Set the project URL and publishable/anon key using environment variables, Gradle properties, or `frontend/local.properties`:
+
+```properties
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-publishable-or-anon-key
+```
+
+Only the client-safe publishable/anon key belongs in the Android app. Never use a service-role key. The URL must use HTTPS. Without configuration the app reports the missing settings and does not bypass authentication.
 
 ## Required build environment
 
@@ -33,6 +45,6 @@ Release builds require `FARM_FAMILY_RELEASE_STORE_FILE`, `FARM_FAMILY_RELEASE_ST
 
 The signed APK is written to `app/build/outputs/apk/release/app-release.apk`.
 
-## Current limits
+## Current implementation boundary
 
-This rebuild replaces the previous mock-only frontend with an architecture-first foundation. Live Supabase authentication and family-scoped backend integration remain the next operational step after the Android toolchain is available and the real backend project is configured.
+Offline persistence and retry are currently limited to field records. Queued inserts are retried when records are refreshed; there is no background connectivity worker, general-purpose sync engine, edit/delete queue, or version-conflict resolution UI. Family setup, authentication, and crop-season reads still require network access. Members/invitations, other record modules, reports, AI, weather, notifications, backup/import/export, and most designed screens remain unimplemented. The Android screens have not been runtime-tested against a live Supabase project or compared visually on a device. Do not treat the APK as production-ready. See [the frontend contract](FRONTEND_CONTRACT.md).

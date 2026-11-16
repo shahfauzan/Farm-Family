@@ -7,9 +7,10 @@ The frontend follows the FARM FAMILY product contract: family-scoped farm operat
 ## Screen map
 
 - Login
-  - Auth state: logged out, logging in, logged in, session expired, auth error
-  - Backend operation: Supabase Auth email/password sign in
-  - UI states: loading, error, demo-only access in debug builds only
+  - Auth state: logged out, restoring, logging in, logged in, logging out, auth error
+  - Backend operation: Supabase Auth email/password sign-in/sign-up, confirmation, password recovery, and reset
+  - Session: refreshable tokens encrypted with Android Keystore
+  - UI states: loading and explicit configuration/network/auth errors; no demo sign-in
 
 - Home
   - Backend operation: family overview query and family context lookup
@@ -37,11 +38,11 @@ The frontend follows the FARM FAMILY product contract: family-scoped farm operat
 
 UI
 ↓
-ViewModel / screen state
+Compose screen state
 ↓
 Repository
 ↓
-Local cache / sync queue
+SQLite field cache / field-insert queue
 ↓
 Supabase backend
 
@@ -63,6 +64,12 @@ Every screen must support loading, error, empty, offline, auth, and permission s
 - Use RPC and backend operations that match the database contract
 - Conflicts must be surfaced and never silently overwritten
 - Auth and family context must be loaded before family-scoped actions
+
+## Current implementation boundary
+
+Authentication and email deep links use Supabase. Family create/join and membership lookup use the existing RPC/Edge Function contract. Fields are cached in a family-scoped SQLite database. New fields are written locally first, carry a stable `local_id`, and are retried when records are refreshed; uncertain insert responses are reconciled against that ID. A cached field list remains available when the field request cannot reach the server, and the UI distinguishes offline/pending states from a successful server fetch.
+
+Offline support is limited to fields and foreground refresh retries. Authentication, family setup, and crop-season reads remain online-only. There is no background connectivity worker, general sync engine, queued edit/delete, or conflict-resolution UI. State is currently held by Compose screen state rather than a ViewModel. Members/invitations, other farm-record modules, reports, AI, weather, notifications, backup/import/export, and most designed screens are not implemented. Live Supabase and rendered-device behavior have not been verified.
 
 ## Example route contract
 
