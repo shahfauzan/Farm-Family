@@ -44,6 +44,7 @@ internal data class FarmUiState(
     val restoreResult: JSONObject? = null,
     val conflict: JSONObject? = null,
     val profileName: String = "",
+    val avatarUrl: String? = null,
     val searchResults: List<JSONObject>? = null
 )
 
@@ -54,12 +55,10 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
     private val preferences = application.getSharedPreferences("farm_family_preferences", Context.MODE_PRIVATE)
     val darkMode = androidx.compose.runtime.mutableStateOf(preferences.getBoolean("dark_mode", false))
     val awadhiLanguage = androidx.compose.runtime.mutableStateOf(preferences.getBoolean("awadhi_language", false))
-    val avatarUri = androidx.compose.runtime.mutableStateOf(preferences.getString("avatar_uri", null))
     val state: androidx.compose.runtime.State<FarmUiState> = _state
 
     fun setDarkMode(enabled: Boolean) { darkMode.value = enabled; preferences.edit().putBoolean("dark_mode", enabled).apply() }
     fun setAwadhiLanguage(enabled: Boolean) { awadhiLanguage.value = enabled; preferences.edit().putBoolean("awadhi_language", enabled).apply() }
-    fun setAvatarUri(uri: String?) { avatarUri.value = uri; preferences.edit().putString("avatar_uri", uri).apply() }
     private var started = false
     private var pendingSyncJob: Job? = null
     private val connectivityManager = application.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -506,6 +505,27 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
         val (updatedName, updatedEmail, passwordChanged) = result
         state.copy(profileName = updatedName, authSession = state.authSession?.copy(displayName = updatedName), messages = state.messages + (if (updatedEmail != state.authSession?.email) ("profile" to "Profile saved. Confirm the email change using the link we sent.") else ("profile" to if (passwordChanged) "Profile and password saved." else "Profile saved.")))
     }
+
+    fun loadAvatar() {
+        val session = _state.value.authSession ?: return
+        val path = session.avatarPath ?: return
+        task("avatar", { farm.profileAvatarUrl(session.accessToken, path) }) { state, url -> state.copy(avatarUrl = url) }
+    }
+
+    fun uploadAvatar(uri: Uri) = task("avatar", {
+        val session = _state.value.authSession ?: error("Sign in again to change your profile picture.")
+        val path = farm.uploadProfileAvatar(session.accessToken, uri)
+        auth.updateAvatarPath(session.accessToken, path)
+        path
+    }) { state, path ->
+        state.copy(authSession = state.authSession?.copy(avatarPath = path), avatarUrl = null, messages = state.messages + ("profile" to "Profile picture saved to your account."))
+    }
+
+    fun removeAvatar() = task("avatar", {
+        val session = _state.value.authSession ?: error("Sign in again to change your profile picture.")
+        farm.deleteProfileAvatar(session.accessToken)
+        auth.updateAvatarPath(session.accessToken, "")
+    }) { state, _ -> state.copy(authSession = state.authSession?.copy(avatarPath = null), avatarUrl = null, messages = state.messages + ("profile" to "Profile picture removed.")) }
 
     fun updateFamily(name: String, currency: String) = task("family_settings", {
         farm.updateFamilyName(token(), familyId(), name, currency)

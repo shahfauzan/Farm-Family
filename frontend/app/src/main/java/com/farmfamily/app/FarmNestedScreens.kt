@@ -442,39 +442,38 @@ private fun FarmProfileScreen(modifier: Modifier, state: FarmUiState, vm: FarmFa
     var name by rememberSaveable { mutableStateOf(state.authSession?.displayName.orEmpty()) }
     var email by rememberSaveable { mutableStateOf(state.authSession?.email.orEmpty()) }
     var password by rememberSaveable { mutableStateOf("") }
-    val context = androidx.compose.ui.platform.LocalContext.current
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        uri?.let { selected ->
-            runCatching { context.contentResolver.takePersistableUriPermission(selected, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-            vm.setAvatarUri(selected.toString())
-        }
+        uri?.let(vm::uploadAvatar)
     }
-    val avatarUri = vm.avatarUri.value?.let(android.net.Uri::parse)
-    val avatarBitmap by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null, avatarUri) {
-        value = avatarUri?.let { imageUri -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            runCatching { context.contentResolver.openInputStream(imageUri)?.use { android.graphics.BitmapFactory.decodeStream(it) } }.getOrNull()
+    LaunchedEffect(state.authSession?.avatarPath) { if (state.authSession?.avatarPath != null) vm.loadAvatar() }
+    val avatarUrl = state.avatarUrl
+    val avatarBitmap by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null, avatarUrl) {
+        value = avatarUrl?.let { signedUrl -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { java.net.URL(signedUrl).openStream().use { android.graphics.BitmapFactory.decodeStream(it) } }.getOrNull()
         } }
     }
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("Profile", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item { Text(farmLabel("Profile", vm.awadhiLanguage.value), style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
         item {
             Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 if (avatarBitmap != null) androidx.compose.foundation.Image(
-                    bitmap = avatarBitmap!!.asImageBitmap(), contentDescription = "Profile picture",
+                    bitmap = avatarBitmap!!.asImageBitmap(), contentDescription = farmLabel("Profile picture", vm.awadhiLanguage.value),
                     modifier = Modifier.size(112.dp).clip(androidx.compose.foundation.shape.CircleShape)
                 ) else androidx.compose.foundation.layout.Box(
                     modifier = Modifier.size(112.dp).clip(androidx.compose.foundation.shape.CircleShape).background(FarmLeaf),
                     contentAlignment = androidx.compose.ui.Alignment.Center
                 ) { Text(name.firstOrNull()?.uppercase() ?: "F", style = MaterialTheme.typography.headlineLarge, color = FarmForest) }
-                TextButton(onClick = { avatarPicker.launch(arrayOf("image/*")) }) { Text(if (avatarUri == null) "Choose profile picture" else "Change profile picture") }
-                if (avatarUri != null) TextButton(onClick = { vm.setAvatarUri(null) }) { Text("Remove picture") }
+                TextButton(onClick = { avatarPicker.launch(arrayOf("image/*")) }, enabled = "avatar" !in state.loading) { Text(farmLabel(if (state.authSession?.avatarPath == null) "Choose profile picture" else "Change profile picture", vm.awadhiLanguage.value)) }
+                if (state.authSession?.avatarPath != null) TextButton(onClick = vm::removeAvatar, enabled = "avatar" !in state.loading) { Text(farmLabel("Remove picture", vm.awadhiLanguage.value)) }
+                if ("avatar" in state.loading) FarmLoadingRow("Saving profile picture…")
             }
         }
-        item { OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Your name") }, singleLine = true) }
-        item { OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email address") }, singleLine = true) }
-        item { OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("New password (leave blank to keep current)") }, singleLine = true, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()) }
-        item { Button(onClick = { vm.updateAccount(name, email, password); password = "" }, modifier = Modifier.fillMaxWidth(), enabled = "profile" !in state.loading) { Text("Save account") } }
+        item { OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text(farmLabel("Your name", vm.awadhiLanguage.value)) }, singleLine = true) }
+        item { OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text(farmLabel("Email address", vm.awadhiLanguage.value)) }, singleLine = true) }
+        item { OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text(farmLabel("New password (leave blank to keep current)", vm.awadhiLanguage.value)) }, singleLine = true, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()) }
+        item { Button(onClick = { vm.updateAccount(name, email, password); password = "" }, modifier = Modifier.fillMaxWidth(), enabled = "profile" !in state.loading) { Text(farmLabel("Save account", vm.awadhiLanguage.value)) } }
         state.messages["profile"]?.let { item { FarmNotice(it) } }; state.errors["profile"]?.let { item { FarmNotice(it, true) } }
+        state.errors["avatar"]?.let { item { FarmNotice(it, true) } }
     }
 }
 
@@ -506,10 +505,10 @@ private fun FarmFamilyInfoScreen(modifier: Modifier, state: FarmUiState, vm: Far
 @Composable
 private fun FarmSettingsScreen(modifier: Modifier, vm: FarmFamilyViewModel, signOut: () -> Unit) {
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("Settings", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
-        item { FarmInlineNote("Records sync securely with the family workspace. Drafts and connectivity status are shown where available.") }
-        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Dark theme", color = FarmInk); androidx.compose.material3.Switch(checked = vm.darkMode.value, onCheckedChange = vm::setDarkMode) } }
-        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Awadhi language (अवधी)", color = FarmInk); androidx.compose.material3.Switch(checked = vm.awadhiLanguage.value, onCheckedChange = vm::setAwadhiLanguage) } }
+        item { Text(farmLabel("Settings", vm.awadhiLanguage.value), style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item { FarmInlineNote(farmLabel("Records sync securely with the family workspace. Drafts and connectivity status are shown where available.", vm.awadhiLanguage.value)) }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(farmLabel("Dark theme", vm.awadhiLanguage.value), color = FarmInk); androidx.compose.material3.Switch(checked = vm.darkMode.value, onCheckedChange = vm::setDarkMode) } }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(farmLabel("Awadhi language (अवधी)", vm.awadhiLanguage.value), color = FarmInk); androidx.compose.material3.Switch(checked = vm.awadhiLanguage.value, onCheckedChange = vm::setAwadhiLanguage) } }
         item { Text("FARM FAMILY · Version 1.0", color = FarmMuted) }
         item { TextButton(onClick = signOut) { Text(farmLabel("Sign out", vm.awadhiLanguage.value)) } }
     }

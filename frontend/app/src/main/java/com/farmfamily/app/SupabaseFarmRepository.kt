@@ -343,6 +343,40 @@ class SupabaseFarmRepository(context: android.content.Context) {
         )).optJSONObject("data") ?: JSONObject()
     }
 
+    fun uploadProfileAvatar(accessToken: String, uri: android.net.Uri): String {
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        appContext.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
+            ?: throw IOException("The selected profile picture could not be opened.")
+        require(bounds.outWidth > 0 && bounds.outHeight > 0 && bounds.outWidth <= 12000 && bounds.outHeight <= 12000) { "Choose a valid image up to 12,000 pixels wide or high." }
+        var sample = 1
+        while (bounds.outWidth / sample > 1024 || bounds.outHeight / sample > 1024) sample *= 2
+        val decoded = appContext.contentResolver.openInputStream(uri)?.use {
+            android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+        } ?: throw IOException("The selected profile picture could not be decoded.")
+        val scaled = if (decoded.width > 512 || decoded.height > 512) {
+            val ratio = minOf(512f / decoded.width, 512f / decoded.height)
+            android.graphics.Bitmap.createScaledBitmap(decoded, (decoded.width * ratio).toInt().coerceAtLeast(1), (decoded.height * ratio).toInt().coerceAtLeast(1), true).also { if (it !== decoded) decoded.recycle() }
+        } else decoded
+        val output = java.io.ByteArrayOutputStream()
+        if (!scaled.compress(android.graphics.Bitmap.CompressFormat.JPEG, 84, output)) throw IOException("The profile picture could not be prepared.")
+        if (scaled !== decoded) scaled.recycle() else decoded.recycle()
+        val bytes = output.toByteArray()
+        require(bytes.size <= 1_500_000) { "Choose a smaller profile picture." }
+        val payload = JSONObject().put("action", "upload").put("image_base64", android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP))
+        return JSONObject(request("functions/v1/profile-avatars", "POST", accessToken, payload)).optString("path")
+            .takeIf(String::isNotBlank) ?: throw IOException("The profile picture was uploaded without a saved path.")
+    }
+
+    fun profileAvatarUrl(accessToken: String, path: String): String {
+        val result = JSONObject(request("functions/v1/profile-avatars", "POST", accessToken,
+            JSONObject().put("action", "signed_url").put("path", path)))
+        return result.optString("url").takeIf(String::isNotBlank) ?: throw IOException("The profile picture link could not be loaded.")
+    }
+
+    fun deleteProfileAvatar(accessToken: String) {
+        request("functions/v1/profile-avatars", "POST", accessToken, JSONObject().put("action", "remove"))
+    }
+
     fun loadFamilies(accessToken: String, userId: String): List<FamilyMembership> {
         val memberships = JSONArray(
             request(

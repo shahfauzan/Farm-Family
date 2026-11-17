@@ -2,7 +2,7 @@
 
 ## Repository setup
 
-The intended source repository is a private GitHub repository containing both `frontend/` and `backend/`. This workspace currently has no Git repository or remote configured, so repository privacy, branch protection, and workflow execution have not been verified.
+The source repository is `shahfauzan/Farm-Family` on the `main` branch and contains both `frontend/` and `backend/`.
 
 ## Continuous integration
 
@@ -12,12 +12,16 @@ The intended source repository is a private GitHub repository containing both `f
 
 Create a GitHub Environment named `production`. Add:
 
-- Environment secrets `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD`.
-- Environment variable `SUPABASE_PROJECT_REF`.
+- Environment secret `SUPABASE_ACCESS_TOKEN`. It must be a Supabase access token allowed to deploy Edge Functions, manage function secrets, and push Auth configuration.
+- Environment secret `SUPABASE_DB_PASSWORD` for the tagged release workflow.
+- Environment variable `SUPABASE_PROJECT_REF` (defaults to the configured FARM FAMILY project reference if omitted).
+- Environment secrets `OPENAI_API_KEY` and `OPENWEATHER_API_KEY`; optional `OPENAI_MODEL` is an environment variable.
 
 The release workflow links the Supabase project, runs `supabase db push --dry-run --linked` to verify connectivity and migration planning, and only then applies migrations. If the dry run or migration deployment fails, function deployment and release creation do not run.
 
-Set `OPENAI_API_KEY` and `OPENWEATHER_API_KEY` (and optional `OPENAI_MODEL`) as Supabase Edge Function secrets in the target project. The Android app must never receive these server credentials. Do not put secret values in GitHub variables, workflow files, documentation, or logs.
+The `Deploy Supabase functions` workflow copies the two provider secrets into Supabase Edge Function secrets. The Android app must never receive these server credentials. Do not put secret values in GitHub variables, workflow files, documentation, or logs. If the GitHub workflow fails its credential check, verify the exact environment secret names above; do not paste secret values into chat.
+
+The live Auth redirect allow list and site URL use `farmfamily://auth-callback`. Supabase rejected custom email templates on the current free tier with the default mail provider. Changing the confirmation template requires a custom SMTP provider or an eligible plan; email confirmation remains enabled.
 
 Before enabling production releases, verify the GitHub runner's network access and credentials against the intended Supabase project. Configure environment approvals/branch restrictions as appropriate for the team.
 
@@ -30,7 +34,7 @@ Before enabling production releases, verify the GitHub runner's network access a
 5. It verifies database connectivity with a migration dry run, applies pending migrations, and deploys Supabase Edge Functions.
 6. Only after successful deployment does it create a GitHub Release and attach the APK.
 
-The APK is unsigned because signing credentials/configuration are not present. It is not suitable for Play Store publication until a secure signing process is deliberately configured.
+The production release workflow signs the APK only when its Android signing secrets are available. The local debug APK is for direct testing, not Play Store publication.
 
 ## Failure and rollback
 
@@ -38,4 +42,4 @@ The workflow stops at the first failed validation, database operation, or functi
 
 ## Current limitations
 
-The release workflow has not been run against the hosted project. It requires valid production Environment configuration and a successful GitHub-runner-to-Supabase connection. Android frontend/backend integration, signed app distribution, and hosted Supabase runtime verification remain outstanding.
+The direct GitHub Supabase deployment workflow is currently failing, so provider API secrets have not yet been copied to the hosted project. The `OPENAI_API_KEY` and `OPENWEATHER_API_KEY` names were absent from the live Edge Function secret list at the last check. Add or correct the production `SUPABASE_ACCESS_TOKEN` secret and rerun the workflow before expecting AI or weather responses.

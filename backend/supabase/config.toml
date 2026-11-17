@@ -11,6 +11,7 @@ enabled = true
 double_confirm_changes = true
 enable_confirmations = true
 
+
 [functions.ai-assistant]
 verify_jwt = true
 

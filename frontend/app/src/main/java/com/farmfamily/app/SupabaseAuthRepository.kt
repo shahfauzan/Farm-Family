@@ -22,7 +22,8 @@ data class AuthSession(
     val expiresAt: Long,
     val userId: String,
     val email: String,
-    val displayName: String = ""
+    val displayName: String = "",
+    val avatarPath: String? = null
 )
 
 class SupabaseAuthRepository(context: Context) {
@@ -94,7 +95,8 @@ class SupabaseAuthRepository(context: Context) {
             displayName = user.optJSONObject("user_metadata")
                 ?.optString("full_name")
                 .orEmpty()
-                .ifBlank { user.optJSONObject("user_metadata")?.optString("name").orEmpty() }
+                .ifBlank { user.optJSONObject("user_metadata")?.optString("name").orEmpty() },
+            avatarPath = user.optJSONObject("user_metadata")?.optString("avatar_path")?.takeIf(String::isNotBlank)
         )
         sessionStore.save(session)
         return AuthCallback(session, parameters["type"] == "recovery")
@@ -120,6 +122,10 @@ class SupabaseAuthRepository(context: Context) {
         request("PUT", "user", body = JSONObject().put("email", email.trim()), accessToken = accessToken)
     }
 
+    fun updateAvatarPath(accessToken: String, path: String) {
+        request("PUT", "user", body = JSONObject().put("data", JSONObject().put("avatar_path", path)), accessToken = accessToken)
+    }
+
     fun restoreSession(): AuthSession? {
         val saved = sessionStore.load() ?: return null
         if (saved.expiresAt <= System.currentTimeMillis() / 1000 + 60) {
@@ -134,7 +140,8 @@ class SupabaseAuthRepository(context: Context) {
                 displayName = user.optJSONObject("user_metadata")
                     ?.optString("full_name")
                     .orEmpty()
-                    .ifBlank { saved.displayName }
+                    .ifBlank { saved.displayName },
+                avatarPath = user.optJSONObject("user_metadata")?.optString("avatar_path")?.takeIf(String::isNotBlank)
             ).also(sessionStore::save)
         } catch (error: SupabaseAuthException) {
             if (error.statusCode != 401) throw error
@@ -181,7 +188,8 @@ class SupabaseAuthRepository(context: Context) {
             expiresAt,
             userId,
             user.optString("email"),
-            metadata?.optString("full_name").orEmpty().ifBlank { metadata?.optString("name").orEmpty() }
+            metadata?.optString("full_name").orEmpty().ifBlank { metadata?.optString("name").orEmpty() },
+            metadata?.optString("avatar_path")?.takeIf(String::isNotBlank)
         )
     }
 
