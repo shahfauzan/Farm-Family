@@ -1,5 +1,9 @@
 package com.farmfamily.app
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
@@ -140,6 +144,11 @@ private fun FarmRecordForm(table: String, mode: String, recordId: String?, modif
                     }
                     input.type == FarmInputType.RELATION -> {
                         val options = state.records[input.relationTable].orEmpty()
+                            LaunchedEffect(input.key, state.messages[input.relationTable], options.size) {
+                                if (state.messages[input.relationTable] == "Changes saved." && options.isNotEmpty() && values[input.key].isNullOrBlank()) {
+                                    values[input.key] = options.first().optString("id")
+                                }
+                            }
                         var expanded by remember(input.key) { mutableStateOf(false) }
                         LaunchedEffect(input.relationTable) { input.relationTable?.let(vm::loadRecords) }
                         Column {
@@ -151,9 +160,9 @@ private fun FarmRecordForm(table: String, mode: String, recordId: String?, modif
                             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                                 options.forEach { option -> DropdownMenuItem(text = { FarmText(option.optString(input.relationLabel)) }, onClick = { values[input.key] = option.optString("id"); expanded = false }) }
                             }
-                            input.relationTable?.takeIf { options.isEmpty() && it in setOf("crops", "fields") }?.let { relatedTable ->
-                                FarmText("No $relatedTable have been added yet.", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
-                                TextButton(onClick = { navigate("form:$relatedTable:new") }) { FarmText("Add ${relatedTable.removeSuffix("s")}") }
+                            input.relationTable?.takeIf { options.isEmpty() }?.let { relatedTable ->
+                                FarmText("Add a ${relatedTable.replace('_', ' ').removeSuffix("s")} first. Your unfinished form will stay here.", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+                                TextButton(onClick = { navigate("form:$relatedTable:new") }) { FarmText("Add ${relatedTable.replace('_', ' ').removeSuffix("s")}") }
                             }
                         }
                     }
@@ -387,7 +396,15 @@ private fun FarmInvitationsScreen(modifier: Modifier, state: FarmUiState, vm: Fa
 
 @Composable
 private fun FarmNotificationsScreen(modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel) {
-    LaunchedEffect(Unit) { vm.loadNotifications() }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    LaunchedEffect(Unit) {
+        vm.loadNotifications()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         item { FarmText("Notifications", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
         state.errors["notifications"]?.let { item { FarmNotice(it, true) } }
@@ -529,7 +546,7 @@ private fun FarmSettingsScreen(modifier: Modifier, vm: FarmFamilyViewModel, sign
         item { FarmInlineNote(farmLabel("Records sync securely with the family workspace. Drafts and connectivity status are shown where available.", vm.hindiLanguage.value)) }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { FarmText(farmLabel("Dark theme", vm.hindiLanguage.value), color = FarmInk); androidx.compose.material3.Switch(checked = vm.darkMode.value, onCheckedChange = vm::setDarkMode) } }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { FarmText(farmLabel("Hindi language", vm.hindiLanguage.value), color = FarmInk); androidx.compose.material3.Switch(checked = vm.hindiLanguage.value, onCheckedChange = vm::setHindiLanguage) } }
-        item { FarmText("FARM FAMILY · Version 1.0", color = FarmMuted) }
+        item { FarmText("FARM FAMILY · Version ${BuildConfig.VERSION_NAME}", color = FarmMuted) }
         item { TextButton(onClick = signOut) { FarmText(farmLabel("Sign out", vm.hindiLanguage.value)) } }
     }
 }
@@ -568,7 +585,6 @@ private fun FarmReportModuleScreen(table: String, modifier: Modifier, state: Far
     val currentMonth = LocalDate.now().monthValue
     var selectedYear by rememberSaveable(table) { mutableStateOf(currentYear) }
     var selectedMonth by rememberSaveable(table) { mutableStateOf(currentMonth) }
-    var showYearMenu by rememberSaveable(table) { mutableStateOf(false) }
     var showMonthMenu by rememberSaveable(table) { mutableStateOf(false) }
     val pickerState = rememberDatePickerState(yearRange = 2000..currentYear)
     LaunchedEffect(table, from, to, state.records[table]) { vm.loadReportRecords(table, from.takeIf(String::isNotBlank), to.takeIf(String::isNotBlank)) }
@@ -577,23 +593,15 @@ private fun FarmReportModuleScreen(table: String, modifier: Modifier, state: Far
         item { FarmText("${module.title} analysis", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
         if (table in setOf("expenses", "sales", "harvest_records", "historical_prices")) item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                FarmYearPicker(selectedYear) { year ->
+                    selectedYear = year
+                    val month = selectedMonth.coerceAtMost(if (year == currentYear) currentMonth else 12)
+                    selectedMonth = month
+                    val start = LocalDate.of(year, month, 1)
+                    from = start.toString()
+                    to = minOf(start.withDayOfMonth(start.lengthOfMonth()), LocalDate.now()).toString()
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    androidx.compose.foundation.layout.Box {
-                        TextButton(onClick = { showYearMenu = true }) { FarmText("Year: $selectedYear") }
-                        DropdownMenu(expanded = showYearMenu, onDismissRequest = { showYearMenu = false }) {
-                            (2000..currentYear).reversed().forEach { year -> DropdownMenuItem(
-                                text = { FarmText(year.toString()) }, onClick = {
-                                    selectedYear = year
-                                    val month = selectedMonth.coerceAtMost(if (year == currentYear) currentMonth else 12)
-                                    selectedMonth = month
-                                    val start = LocalDate.of(year, month, 1)
-                                    from = start.toString()
-                                    to = minOf(start.withDayOfMonth(start.lengthOfMonth()), LocalDate.now()).toString()
-                                    showYearMenu = false
-                                }
-                            ) }
-                        }
-                    }
                     androidx.compose.foundation.layout.Box {
                         TextButton(onClick = { showMonthMenu = true }) {
                             FarmText(java.time.Month.of(selectedMonth).getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH))

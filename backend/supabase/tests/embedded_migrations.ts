@@ -19,7 +19,7 @@ try {
     create function public.digest(text,text) returns bytea language sql immutable as $$ select public.digest(convert_to($1,'UTF8'),$2) $$;
     create function public.gen_random_bytes(integer) returns bytea language sql volatile as $$ select decode(substr(repeat(md5(random()::text),ceil($1/16.0)::integer),1,$1*2),'hex') $$;
   `);
-  for (const name of ['202611140001_farm_family.sql','202611140002_secure_operations.sql','202611140004_unit_safe_harvest_reports.sql','202611140005_finance_currency_validation.sql','20261117032903_family_member_roster.sql','20261117072159_harden_security_definer_privileges.sql','20261117073707_restore_weather_quota_schema.sql','20261117084500_family_area_preferences.sql']) {
+  for (const name of ['202611140001_farm_family.sql','202611140002_secure_operations.sql','202611140004_unit_safe_harvest_reports.sql','202611140005_finance_currency_validation.sql','20261117032903_family_member_roster.sql','20261117072159_harden_security_definer_privileges.sql','20261117073707_restore_weather_quota_schema.sql','20261117084500_family_area_preferences.sql','20261117090000_reload_postgrest_schema.sql']) {
     const source = await Deno.readTextFile(`supabase/migrations/${name}`);
     const sql = source.replace(/^create extension if not exists pgcrypto;\s*/m, '-- pgcrypto stubbed for embedded migration syntax validation.\n');
     await db.exec(sql);

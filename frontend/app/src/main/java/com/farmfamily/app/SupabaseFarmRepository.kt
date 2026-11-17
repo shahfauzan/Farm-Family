@@ -757,7 +757,7 @@ class SupabaseFarmRepository(context: android.content.Context) {
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val raw = stream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }.orEmpty()
-            if (status !in 200..299) throw SupabaseApiException(status, errorMessage(status, raw))
+            if (status !in 200..299) throw SupabaseApiException(status, errorMessage(status, raw, path))
             return raw
         } catch (error: SupabaseApiException) {
             throw error
@@ -775,7 +775,7 @@ class SupabaseFarmRepository(context: android.content.Context) {
 
     private class NetworkUnavailableException(message: String, cause: Throwable) : IOException(message, cause)
 
-    private fun errorMessage(status: Int, raw: String): String {
+    private fun errorMessage(status: Int, raw: String, path: String): String {
         if (raw.isBlank()) return friendlyStatus(status)
         val error = try {
             JSONObject(raw)
@@ -791,13 +791,25 @@ class SupabaseFarmRepository(context: android.content.Context) {
         if (!code.isNullOrBlank()) Log.w("FarmFamily", "Supabase request failed: HTTP $status, code=$code")
         if (serverMessage.isNullOrBlank()) return friendlyStatus(status)
         val diagnostic = "$code $serverMessage".lowercase()
-        if (diagnostic.contains(Regex("sqlstate|\\b[0-9a-f]{8}-[0-9a-f-]{27,}\\b")) ||
-            diagnostic.contains("schema cache") || diagnostic.contains("could not find the function") ||
-            diagnostic.contains("function public.") || diagnostic.contains("relation does not exist") ||
-            diagnostic.contains("does not exist") || diagnostic.contains("column ") && diagnostic.contains(" does not exist")) {
-            return friendlyStatus(status)
+        if (diagnostic.contains("schema cache") || diagnostic.contains("could not find the function") || diagnostic.contains("function public.")) {
+            return "The connected family service is missing a required operation. Update the Supabase backend, then try again."
         }
+        if (diagnostic.contains("relation does not exist") || diagnostic.contains("table") && diagnostic.contains("does not exist")) {
+            return "The connected database is missing a required table. Apply the latest Supabase database updates, then try again."
+        }
+        if (diagnostic.contains("column ") && diagnostic.contains(" does not exist")) {
+            return "The connected database needs the latest Supabase updates. Apply them, then try again."
+        }
+        if (diagnostic.contains(Regex("sqlstate|\\b[0-9a-f]{8}-[0-9a-f-]{27,}\\b"))) return friendlyStatus(status)
         return when (code?.uppercase()) {
+            "SERVICE_UNAVAILABLE" -> when {
+                path.contains("ai-assistant") -> "The AI assistant is not fully configured on the production service. Check the OpenAI key in the GitHub production environment."
+                path.contains("farm-weather") -> "Weather is not configured on the production service. Check the OpenWeather key in the GitHub production environment."
+                else -> friendlyStatus(status)
+            }
+            "AI_UPSTREAM_ERROR", "AI_TIMEOUT" -> "The AI provider did not respond. Check the OpenAI key and account status in the GitHub production environment."
+            "WEATHER_PROVIDER_UNAVAILABLE" -> "The weather provider did not respond. Check the OpenWeather key and account status in the GitHub production environment."
+            "RATE_LIMITED" -> "The family has reached its AI usage limit for now. Try again later."
             "FAMILY_ACCESS_DENIED", "OWNER_REQUIRED", "EDITOR_REQUIRED", "ADD_PERMISSION_REQUIRED", "EDIT_PERMISSION_REQUIRED", "DELETE_PERMISSION_REQUIRED" -> "Your family role does not allow this action."
             "INVALID_INVITATION", "INVITATION_EXPIRED", "INVITATION_REVOKED", "INVITATION_ALREADY_USED" -> "This invitation is no longer valid. Ask the family owner for a new one."
             "RECORD_NOT_FOUND" -> "This record is no longer available. Refresh the list and try again."

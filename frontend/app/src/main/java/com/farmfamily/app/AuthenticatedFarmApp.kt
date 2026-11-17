@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.listSaver
@@ -21,6 +22,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.delay
 
 @Composable
 internal fun FarmFamilyApp(
@@ -142,7 +145,20 @@ internal fun FarmWorkspaceScreen(viewModel: FarmFamilyViewModel, state: FarmUiSt
     ) { mutableStateListOf<String>() }
     var signOutConfirm by rememberSaveable { mutableStateOf(false) }
     val family = state.family ?: return
-    LaunchedEffect(family.id) { viewModel.loadHomeSummary() }
+    val routeStateHolder = rememberSaveableStateHolder()
+    val appContext = LocalContext.current
+    LaunchedEffect(family.id) {
+        viewModel.loadHomeSummary()
+        viewModel.loadNotifications()
+        while (true) {
+            delay(60_000)
+            viewModel.loadNotifications()
+        }
+    }
+    val notificationIds = state.notifications?.joinToString("|") { it.optString("id") + ":" + it.optString("read_at") }
+    LaunchedEffect(family.id, notificationIds) {
+        state.notifications?.let { FarmStatusNotifications.process(appContext, family.id, it) }
+    }
     BackHandler(routeStack.isNotEmpty()) { routeStack.removeAt(routeStack.lastIndex) }
 
     fun navigate(route: String) { routeStack.add(route) }
@@ -161,15 +177,17 @@ internal fun FarmWorkspaceScreen(viewModel: FarmFamilyViewModel, state: FarmUiSt
     ) { contentModifier ->
         val route = routeStack.lastOrNull()
         if (route != null) {
-            FarmNestedRoute(
-                route = route,
-                modifier = contentModifier,
-                viewModel = viewModel,
-                state = state,
-                onNavigate = ::navigate,
-                onBack = ::back,
-                onSignOut = { signOutConfirm = true }
-            )
+            routeStateHolder.SaveableStateProvider(route) {
+                FarmNestedRoute(
+                    route = route,
+                    modifier = contentModifier,
+                    viewModel = viewModel,
+                    state = state,
+                    onNavigate = ::navigate,
+                    onBack = ::back,
+                    onSignOut = { signOutConfirm = true }
+                )
+            }
         } else {
             when (FarmTab.valueOf(selectedTab)) {
                 FarmTab.HOME -> FarmHomeScreen(

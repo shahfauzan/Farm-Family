@@ -1,5 +1,17 @@
 package com.farmfamily.app
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
+import android.os.Build
+import android.os.CancellationSignal
+import android.os.Looper
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -56,6 +68,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -66,10 +79,63 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private fun requestDeviceLocation(context: Context, onLocation: (Location) -> Unit) {
+    val manager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    val permitted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    if (!permitted) return
+    val providers = manager.getProviders(true).filter { it == LocationManager.NETWORK_PROVIDER || it == LocationManager.GPS_PROVIDER }
+    val last = providers.mapNotNull { provider -> runCatching { manager.getLastKnownLocation(provider) }.getOrNull() }
+        .maxByOrNull { it.time }
+    if (last != null) onLocation(last)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        providers.forEach { provider ->
+            runCatching { manager.getCurrentLocation(provider, CancellationSignal(), context.mainExecutor, onLocation) }
+        }
+    } else {
+        val listener = object : LocationListener {
+            override fun onLocationChanged(location: Location) = onLocation(location)
+        }
+        providers.firstOrNull()?.let { provider -> runCatching { manager.requestSingleUpdate(provider, listener, Looper.getMainLooper()) } }
+    }
+}
+
+@Composable
+internal fun FarmYearPicker(selectedYear: Int, onSelectYear: (Int) -> Unit) {
+    var showOlderYears by rememberSaveable { mutableStateOf(false) }
+    val currentYear = java.time.Year.now().value
+    val recentYears = (currentYear - 2..currentYear).filter { it >= 2000 }
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+        recentYears.forEach { year ->
+            FilterChip(
+                selected = selectedYear == year,
+                onClick = { onSelectYear(year) },
+                label = { FarmText(year.toString(), maxLines = 1) },
+                modifier = Modifier.weight(1f)
+            )
+        }
+        androidx.compose.foundation.layout.Box {
+            TextButton(onClick = { showOlderYears = true }, contentPadding = PaddingValues(horizontal = 5.dp)) {
+                FarmText(if (selectedYear !in recentYears) selectedYear.toString() else "More", maxLines = 1)
+            }
+            androidx.compose.material3.DropdownMenu(expanded = showOlderYears, onDismissRequest = { showOlderYears = false }) {
+                (2000 until currentYear - 2).reversed().forEach { year ->
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { FarmText(year.toString()) },
+                        onClick = { showOlderYears = false; onSelectYear(year) }
+                    )
+                }
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -163,6 +229,15 @@ internal fun FarmHomeScreen(
     onLoadWeather: (Double, Double) -> Unit,
     onNavigate: (String) -> Unit
 ) {
+    val context = LocalContext.current
+    var deviceLatitude by rememberSaveable(family.id) { mutableStateOf<Double?>(null) }
+    var deviceLongitude by rememberSaveable(family.id) { mutableStateOf<Double?>(null) }
+    val locationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
+        if (permissions.values.any { it }) requestDeviceLocation(context) { location ->
+            deviceLatitude = location.latitude
+            deviceLongitude = location.longitude
+        }
+    }
     val date = rememberSaveable { SimpleDateFormat("EEEE, d MMMM", Locale.getDefault()).format(Date()) }
     val firstName = userName.trim().substringBefore(' ')
     val activeSeasons = seasons.filter { it.isNull("end_date") }
@@ -170,8 +245,20 @@ internal fun FarmHomeScreen(
     val location = fields.firstNotNullOfOrNull { it.optJSONObject("location")?.takeIf { value -> !value.isNull("latitude") && !value.isNull("longitude") } }
     val lat = location?.optDouble("latitude")?.takeIf(Double::isFinite)
     val lon = location?.optDouble("longitude")?.takeIf(Double::isFinite)
-    LaunchedEffect(family.id, lat, lon) {
-        if (weather == null && lat != null && lon != null && "weather" !in loading) onLoadWeather(lat, lon)
+    LaunchedEffect(family.id) {
+        val hasLocationPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (hasLocationPermission) requestDeviceLocation(context) { location ->
+            deviceLatitude = location.latitude
+            deviceLongitude = location.longitude
+        } else {
+            locationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION))
+        }
+    }
+    val weatherLatitude = deviceLatitude ?: lat
+    val weatherLongitude = deviceLongitude ?: lon
+    LaunchedEffect(family.id, weatherLatitude, weatherLongitude) {
+        if (weather == null && weatherLatitude != null && weatherLongitude != null && "weather" !in loading) onLoadWeather(weatherLatitude, weatherLongitude)
     }
     val totalRevenue = report?.revenue
     val totalCost = report?.cost
@@ -237,11 +324,11 @@ internal fun FarmHomeScreen(
         }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                FarmSectionTitle("Weather", if (lat == null) "Add field coordinates" else null)
+                FarmSectionTitle("Weather", if (deviceLatitude != null) "Your device location" else if (lat != null) "Your field location" else null)
                 when {
-                    lat == null || lon == null -> FarmInlineNote("Add latitude and longitude to a field to see local conditions.")
+                    weatherLatitude == null || weatherLongitude == null -> FarmInlineNote("Allow location access to see weather near this device. Your location is only used to request local weather.")
                     "weather" in loading -> FarmLoadingRow("Getting local weather…")
-                    errors["weather"] != null -> FarmInlineErrorCard(errors.getValue("weather"), onRetry = { onLoadWeather(lat, lon) })
+                    errors["weather"] != null -> FarmInlineErrorCard(errors.getValue("weather"), onRetry = { onLoadWeather(weatherLatitude, weatherLongitude) })
                     weather != null -> FarmWeatherRow(weather)
                     else -> FarmInlineNote("Weather hasn’t been requested yet.")
                 }
@@ -362,26 +449,13 @@ internal fun FarmReportsScreen(
     onNavigate: (String) -> Unit = {}
 ) {
     var selectedYear by rememberSaveable { mutableStateOf(java.time.Year.now().value) }
-    var showYearMenu by rememberSaveable { mutableStateOf(false) }
     val reportYear = report?.year
     LazyColumn(modifier, contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 88.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             FarmText("Reports", style = MaterialTheme.typography.headlineMedium, color = FarmForest)
             FarmText("A clear view of the work your family has recorded.", style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
         }
-        item {
-            androidx.compose.foundation.layout.Box {
-                TextButton(onClick = { showYearMenu = true }) { FarmText("Year: $selectedYear") }
-                androidx.compose.material3.DropdownMenu(expanded = showYearMenu, onDismissRequest = { showYearMenu = false }) {
-                    (2000..java.time.Year.now().value).reversed().forEach { year ->
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { FarmText(year.toString()) },
-                            onClick = { selectedYear = year; showYearMenu = false; onSelectYear(year) }
-                        )
-                    }
-                }
-            }
-        }
+        item { FarmYearPicker(selectedYear) { selectedYear = it; onSelectYear(it) } }
         when {
             loading -> item { FarmLoadingRow("Loading family reports…") }
             error != null -> item { FarmInlineErrorCard(error, onRetry) }

@@ -39,7 +39,7 @@ val releaseBuildRequested = gradle.startParameter.taskNames.any {
 }
 val appVersionName = providers.environmentVariable("FARM_FAMILY_VERSION_NAME")
     .orElse(providers.gradleProperty("FARM_FAMILY_VERSION_NAME"))
-    .orElse("1.0.2")
+    .orElse("1.0.4")
     .get()
 
 if (releaseBuildRequested && !releaseSigningConfigured) {
@@ -54,7 +54,7 @@ android {
         applicationId = "com.farmfamily.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
+        versionCode = 4
         versionName = appVersionName
         buildConfigField("String", "SUPABASE_URL", buildConfigValue(supabaseUrl))
         buildConfigField("String", "SUPABASE_ANON_KEY", buildConfigValue(supabaseAnonKey))
