@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -58,7 +59,13 @@ private fun FarmFamilyAppContent(
         }
     }
     LaunchedEffect(initialCallback) {
-        viewModel.start(initialCallback)
+        val invitationLink = initialCallback?.takeIf { it.scheme == "farmfamily" && it.host == "invite" }
+        if (invitationLink != null) {
+            viewModel.start(null)
+            viewModel.receiveInvitationLink(invitationLink.getQueryParameter("token"))
+        } else {
+            viewModel.start(initialCallback)
+        }
         if (initialCallback != null) onCallbackHandled()
     }
 
@@ -85,12 +92,20 @@ private fun FarmFamilyAppContent(
                     loading = state.authLoading,
                     message = state.authMessage,
                     messageIsError = state.authMessageIsError,
+                    invitationPending = state.pendingInvitationToken != null,
                     onSignIn = viewModel::signIn,
                     onSignUp = viewModel::signUp,
                     onRecover = viewModel::recoverPassword
                 )
             }
         }
+        state.authSession != null && state.pendingInvitationToken != null && state.invitationJoinError != null ->
+            FarmInvitationJoinErrorScreen(
+                message = state.invitationJoinError,
+                onRetry = viewModel::retryPendingInvitation,
+                onDismiss = viewModel::dismissPendingInvitation
+            )
+        state.authSession != null && state.pendingInvitationToken != null -> FarmSplashScreen("Joining your family")
         state.familyLoading && state.memberships == null -> FarmSplashScreen("Loading your family")
         state.memberships == null && state.familyError != null -> FarmErrorScreen(
             title = "We couldn’t load your family",
@@ -109,6 +124,22 @@ private fun FarmFamilyAppContent(
         )
         state.family == null -> FarmSplashScreen("Preparing your farm")
         else -> FarmWorkspaceScreen(viewModel, state)
+    }
+}
+
+@Composable
+private fun FarmInvitationJoinErrorScreen(message: String, onRetry: () -> Unit, onDismiss: () -> Unit) {
+    androidx.compose.foundation.layout.Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
+    ) {
+        FarmText("Could not join this family", style = MaterialTheme.typography.headlineSmall, color = FarmForest)
+        androidx.compose.foundation.layout.Spacer(Modifier.size(10.dp))
+        FarmText(message, style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
+        androidx.compose.foundation.layout.Spacer(Modifier.size(18.dp))
+        androidx.compose.material3.Button(onClick = onRetry) { FarmText("Try invitation again") }
+        androidx.compose.material3.TextButton(onClick = onDismiss) { FarmText("Continue without joining") }
     }
 }
 

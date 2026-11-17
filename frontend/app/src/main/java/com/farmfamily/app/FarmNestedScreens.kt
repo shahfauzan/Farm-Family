@@ -392,17 +392,30 @@ private fun FarmInvitationsScreen(modifier: Modifier, state: FarmUiState, vm: Fa
             Button(onClick = { val d = days.toIntOrNull(); if (d != null && d in 1..30) vm.createInvitation(role, d) }, modifier = Modifier.fillMaxWidth()) { FarmText("Create invitation") }
         }
         state.createdInvitation?.let { invitation -> item {
+            val invitationLink = android.net.Uri.Builder()
+                .scheme("farmfamily")
+                .authority("invite")
+                .appendQueryParameter("token", invitation.token)
+                .build()
+                .toString()
             Column(Modifier.fillMaxWidth().background(FarmLeaf).padding(12.dp)) {
-                FarmText("Invitation code: ${invitation.token}", color = FarmForest)
+                FarmText("Shareable invitation link", color = FarmForest)
+                FarmText(invitationLink, color = FarmInk)
                 FarmText("Expires ${invitation.expiresAt}", color = FarmMuted)
                 Row {
-                    TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(invitation.token)) }) { FarmText("Copy code") }
+                    TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(invitationLink)) }) { FarmText("Copy link") }
                     TextButton(onClick = {
                         val share = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
-                            .putExtra(android.content.Intent.EXTRA_TEXT, "Join my FARM FAMILY workspace with this invitation code: ${invitation.token}")
+                            .putExtra(
+                                android.content.Intent.EXTRA_TEXT,
+                                "Join my FARM FAMILY family by opening this link on Android: $invitationLink\n" +
+                                    "Sign in or create an account and you will join automatically. No owner approval is needed. " +
+                                    "This invitation expires ${invitation.expiresAt}."
+                            )
                         context.startActivity(android.content.Intent.createChooser(share, "Share family invitation"))
-                    }) { FarmText("Share") }
+                    }) { FarmText("Share link") }
                 }
+                FarmText("Anyone with this link can join using its invitation role until it expires or is revoked. Share it only with the intended person.", color = FarmMuted, style = MaterialTheme.typography.bodySmall)
             }
         } }
         state.errors["invitations"]?.let { item { FarmNotice(it, true) } }

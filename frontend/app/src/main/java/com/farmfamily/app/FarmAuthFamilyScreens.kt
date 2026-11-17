@@ -50,6 +50,7 @@ internal fun FarmAuthenticationScreen(
     loading: Boolean,
     message: String?,
     messageIsError: Boolean,
+    invitationPending: Boolean = false,
     onSignIn: (String, String) -> Unit,
     onSignUp: (String, String, String) -> Unit,
     onRecover: (String) -> Unit
@@ -82,6 +83,9 @@ internal fun FarmAuthenticationScreen(
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             FarmText("FARM FAMILY", style = MaterialTheme.typography.labelLarge, color = FarmGreen, letterSpacing = 1.4.sp)
             FarmText("Grow together. Prosper together.", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+        }
+        if (invitationPending) {
+            FarmInlineNote("Family invitation ready. Sign in or create an account and you will join automatically. No owner approval is needed.")
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
             FarmText(title, style = MaterialTheme.typography.headlineMedium, color = FarmForest)
@@ -251,7 +255,7 @@ internal fun FarmFamilySetupScreen(
             TextButton(onClick = { joining = true; validation = null }) { FarmText("Join a family") }
         }
         if (joining) {
-            OutlinedTextField(invitation, { invitation = it; validation = null }, label = { FarmText("Invitation code") }, enabled = !loading, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(invitation, { invitation = it; validation = null }, label = { FarmText("Invitation link or code") }, enabled = !loading, modifier = Modifier.fillMaxWidth())
         } else {
             OutlinedTextField(familyName, { familyName = it; validation = null }, label = { FarmText("Family name") }, enabled = !loading, modifier = Modifier.fillMaxWidth())
         }

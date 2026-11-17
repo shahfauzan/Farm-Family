@@ -446,14 +446,15 @@ class SupabaseFarmRepository(context: android.content.Context) {
         )
     }
 
-    fun acceptInvitation(accessToken: String, token: String) {
+    fun acceptInvitation(accessToken: String, token: String): String {
         require(token.isNotBlank()) { "Enter an invitation code." }
-        request(
+        val response = request(
             "functions/v1/accept-invitation",
             "POST",
             accessToken,
             JSONObject().put("token", token.trim())
         )
+        return JSONObject(response).getString("family_id")
     }
 
     fun loadFields(accessToken: String, familyId: String): FieldRecordsSnapshot {

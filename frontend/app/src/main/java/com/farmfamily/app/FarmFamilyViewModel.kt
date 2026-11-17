@@ -46,7 +46,9 @@ internal data class FarmUiState(
     val conflict: JSONObject? = null,
     val profileName: String = "",
     val avatarUrl: String? = null,
-    val searchResults: List<JSONObject>? = null
+    val searchResults: List<JSONObject>? = null,
+    val pendingInvitationToken: String? = null,
+    val invitationJoinError: String? = null
 )
 
 internal data class AiExpenseDraft(val description: String, val amount: Double, val date: String)
@@ -54,8 +56,10 @@ internal data class AiExpenseDraft(val description: String, val amount: Double, 
 internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(application) {
     private val auth = SupabaseAuthRepository(application)
     private val farm = SupabaseFarmRepository(application)
-    private val _state = androidx.compose.runtime.mutableStateOf(FarmUiState())
     private val preferences = application.getSharedPreferences("farm_family_preferences", Context.MODE_PRIVATE)
+    private val _state = androidx.compose.runtime.mutableStateOf(
+        FarmUiState(pendingInvitationToken = preferences.getString("pending_invitation_token", null))
+    )
     private val autoNightEnabled = androidx.compose.runtime.mutableStateOf(preferences.getBoolean("auto_night_mode", true))
     val darkMode = androidx.compose.runtime.mutableStateOf(
         if (autoNightEnabled.value) isNightTime() else preferences.getBoolean("dark_mode", false)
@@ -84,6 +88,7 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
     fun setHindiLanguage(enabled: Boolean) { hindiLanguage.value = enabled; preferences.edit().putBoolean("hindi_language", enabled).apply() }
     private var started = false
     private var pendingSyncJob: Job? = null
+    private var invitationJoinJob: Job? = null
     private val connectivityManager = application.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
@@ -139,7 +144,9 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
             try {
                 val session = withContext(Dispatchers.IO) { auth.restoreSession() }
                 update { it.copy(authLoading = false, authSession = session, authMessage = null) }
-                if (session != null) loadFamilies()
+                if (session != null) {
+                    if (_state.value.pendingInvitationToken != null) tryAutoJoinInvitation() else loadFamilies()
+                }
             } catch (error: Exception) {
                 update { it.copy(authLoading = false, authMessage = error.message ?: "Your saved session could not be restored.", authMessageIsError = true) }
             }
@@ -152,7 +159,7 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
             try {
                 val callback = withContext(Dispatchers.IO) { auth.handleAuthCallback(uri) }
                 update { it.copy(authLoading = false, authSession = callback.session, passwordRecovery = callback.passwordRecovery, authMessage = null) }
-                loadFamilies()
+                if (_state.value.pendingInvitationToken != null && !callback.passwordRecovery) tryAutoJoinInvitation() else loadFamilies()
             } catch (error: Exception) {
                 update { it.copy(authLoading = false, authSession = null, authMessage = error.message ?: "This email link is invalid or expired.", authMessageIsError = true) }
             }
@@ -220,7 +227,7 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
                     update { it.copy(authLoading = false, authMessage = "Check your email to confirm your account, then sign in.", authMessageIsError = false) }
                 } else {
                     update { it.copy(authLoading = false, authSession = session, authMessage = null, passwordRecovery = false) }
-                    loadFamilies()
+                    if (_state.value.pendingInvitationToken != null) tryAutoJoinInvitation() else loadFamilies()
                 }
             } catch (error: Exception) {
                 update { it.copy(authLoading = false, authMessage = error.message ?: "Authentication failed. Try again.", authMessageIsError = true) }
@@ -249,7 +256,76 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
 
     fun createFamily(name: String) = familyAction { session -> farm.createFamily(session.accessToken, name) }
 
-    fun joinFamily(inviteToken: String) = familyAction { session -> farm.acceptInvitation(session.accessToken, inviteToken) }
+    fun receiveInvitationLink(rawToken: String?) {
+        val inviteToken = rawToken?.trim()?.takeIf { INVITATION_TOKEN_PATTERN.matches(it) }
+        if (inviteToken == null) {
+            update { it.copy(authMessage = "This invitation link is not valid. Ask the family owner for a new link.", authMessageIsError = true) }
+            return
+        }
+        preferences.edit().putString("pending_invitation_token", inviteToken).apply()
+        update { it.copy(pendingInvitationToken = inviteToken, invitationJoinError = null, authMessage = null) }
+        tryAutoJoinInvitation()
+    }
+
+    fun joinFamily(invitationOrLink: String) {
+        val value = invitationOrLink.trim()
+        val inviteToken = if (value.startsWith("farmfamily://", ignoreCase = true)) {
+            runCatching { Uri.parse(value).getQueryParameter("token") }.getOrNull()
+        } else value
+        if (inviteToken.isNullOrBlank() || !INVITATION_TOKEN_PATTERN.matches(inviteToken)) {
+            update { it.copy(familyError = "Enter a valid invitation link or code.") }
+            return
+        }
+        preferences.edit().putString("pending_invitation_token", inviteToken).apply()
+        update { it.copy(pendingInvitationToken = inviteToken, invitationJoinError = null, familyError = null) }
+        tryAutoJoinInvitation()
+    }
+
+    fun retryPendingInvitation() {
+        update { it.copy(invitationJoinError = null) }
+        tryAutoJoinInvitation()
+    }
+
+    fun dismissPendingInvitation() {
+        preferences.edit().remove("pending_invitation_token").apply()
+        update { it.copy(pendingInvitationToken = null, invitationJoinError = null) }
+        if (_state.value.authSession != null && _state.value.memberships == null) loadFamilies()
+    }
+
+    private fun tryAutoJoinInvitation() {
+        val inviteToken = _state.value.pendingInvitationToken ?: return
+        val session = _state.value.authSession ?: return
+        if (invitationJoinJob?.isActive == true) return
+        update { it.copy(familyLoading = true, invitationJoinError = null, familyError = null) }
+        invitationJoinJob = viewModelScope.launch {
+            try {
+                val joinedFamilyId = withContext(Dispatchers.IO) { farm.acceptInvitation(session.accessToken, inviteToken) }
+                val families = withContext(Dispatchers.IO) { farm.loadFamilies(session.accessToken, session.userId) }
+                val joinedFamily = families.firstOrNull { it.id == joinedFamilyId }
+                    ?: throw IllegalStateException("The invited family could not be opened. Refresh your family list and try again.")
+                preferences.edit().remove("pending_invitation_token").apply()
+                update {
+                    it.copy(
+                        familyLoading = false,
+                        memberships = families,
+                        family = joinedFamily,
+                        familyError = null,
+                        pendingInvitationToken = null,
+                        invitationJoinError = null,
+                        records = emptyMap(),
+                        yearReport = null
+                    )
+                }
+            } catch (error: Exception) {
+                update {
+                    it.copy(
+                        familyLoading = false,
+                        invitationJoinError = error.message ?: "The invitation could not be accepted. Check your connection and retry."
+                    )
+                }
+            }
+        }
+    }
 
     private fun familyAction(action: (AuthSession) -> Unit) {
         val session = _state.value.authSession ?: return
@@ -600,5 +676,9 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
                 update { it.copy(loading = it.loading - key, errors = it.errors + (key to (error.message ?: "The request could not be completed."))) }
             }
         }
+    }
+
+    private companion object {
+        val INVITATION_TOKEN_PATTERN = Regex("[a-fA-F0-9]{64}")
     }
 }
