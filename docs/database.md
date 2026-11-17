@@ -13,6 +13,7 @@ Migrations live in `backend/supabase/migrations/` and use timestamped, chronolog
 - `202611140003_weather_quota.sql`
 - `202611140004_unit_safe_harvest_reports.sql`
 - `202611140005_finance_currency_validation.sql`
+- `202611160006_family_member_roster.sql`
 
 Do not edit, delete, rename, reorder, squash, or manually mark existing migrations as applied. Add new schema changes as new timestamped migrations.
 
@@ -27,3 +28,7 @@ The schema uses PostgreSQL row-level security and database-side authorization fo
 Production migrations are applied only by the release workflow, after a database dry run verifies that the GitHub runner can connect and authenticate. A failed migration stops the release before Edge Function deployment or GitHub Release creation. Never bypass Supabase migration tracking or apply destructive SQL without explicit authorization.
 
 Maintain Supabase-managed backups and verify restore procedures independently. A database backup is not a substitute for testing migrations and restore paths.
+
+## Hosted project state (2026-11-17)
+
+The connected `farm-family` project is active. The family member roster migration is applied and its function and profile policy were verified. The hosted migration history is incomplete: it contains only the plugin-applied roster entry `20261117032903` and does not contain repository migrations `202611140001` through `202611140005` or the local version `202611160006`. Reconcile the hosted migration history with the existing schema before using the release workflow; otherwise it may attempt to replay baseline DDL against tables that already exist. Do not treat this project as ready for automated migration releases until that reconciliation has been completed.

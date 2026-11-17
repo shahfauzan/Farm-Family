@@ -56,10 +56,10 @@ Do not mark an item complete from a visual placeholder. Each journey must use au
 
 ## Verification and deployment notes
 
-- The Supabase management connection identified project `mtjpjrjxftqlwescilyc` as inactive. Read-only table/migration inspection timed out; migration 006 was not applied to the remote database.
+- The connected Supabase project `wkeotktsjwoejspyhprs` is active. The family roster function and profile policy are applied and verified. Hosted migration history does not yet include the repository baseline migrations 001–005; reconcile migration history before using automated releases.
 - `:app:compileDebugKotlin` passes. `:app:testDebugUnitTest` reports `NO-SOURCE`; no unit tests exist.
 - The connected Windows environment has no available `adb` command/device, so runtime screen comparison against the PDF has not been performed.
-- The local Supabase CLI is unavailable, so the new SQL migration has not been applied or tested against a live database.
+- Migration 006 was applied to the active hosted project through the Supabase management connection and verified there. It has not been exercised against a local Supabase stack.
 - Offline create drafts sync when a corresponding record list is loaded after network returns. They do not yet have a background connectivity observer, edit/delete queue, or a dedicated conflict resolution screen.
 - Authentication failures are translated to user-facing messages instead of exposing the raw Supabase response text.
 - Date range filters use server report RPCs; finance totals remain separated by currency to avoid combining unlike units.

@@ -24,12 +24,13 @@ grant execute on function public.family_member_roster(uuid,boolean) to authentic
 
 -- Let a member read names of people in the same family without exposing the
 -- profiles table broadly; removed members remain visible only to an owner.
+drop policy if exists profile_family_select on public.profiles;
 create policy profile_family_select on public.profiles for select to authenticated
 using (exists (
   select 1
   from public.family_members mine
   join public.family_members target on target.family_id=mine.family_id
-  where mine.user_id=auth.uid()
+  where mine.user_id=(select auth.uid())
     and mine.removed_at is null and mine.can_view
     and target.user_id=profiles.id
     and (target.removed_at is null or mine.role='OWNER')
