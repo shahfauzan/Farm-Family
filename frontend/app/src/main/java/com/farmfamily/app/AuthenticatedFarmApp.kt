@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.delay
+import java.time.LocalTime
 
 @Composable
 internal fun FarmFamilyApp(
@@ -43,6 +44,16 @@ private fun FarmFamilyAppContent(
     onCallbackHandled: () -> Unit
 ) {
     val state = viewModel.state.value
+    LaunchedEffect(viewModel) {
+        while (true) {
+            if (viewModel.isAutoNightModeEnabled()) {
+                val hour = LocalTime.now().hour
+                val night = hour >= 19 || hour < 6
+                if (viewModel.darkMode.value != night) viewModel.setAutoNightMode(true)
+            }
+            delay(60_000)
+        }
+    }
     LaunchedEffect(initialCallback) {
         viewModel.start(initialCallback)
         if (initialCallback != null) onCallbackHandled()
@@ -213,6 +224,8 @@ internal fun FarmWorkspaceScreen(viewModel: FarmFamilyViewModel, state: FarmUiSt
                 FarmTab.REPORTS -> FarmReportsScreen(
                     modifier = contentModifier,
                     family = family,
+                    firstReportYear = state.authSession?.createdAt?.take(4)?.toIntOrNull()
+                        ?: java.time.Year.now().value,
                     report = state.yearReport,
                     loading = "home_report" in state.loading,
                     error = state.errors["home_report"],

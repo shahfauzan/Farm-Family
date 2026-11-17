@@ -67,8 +67,19 @@ Deno.serve(async (req) => {
       bytes=new Uint8Array(await wb.xlsx.writeBuffer() as ArrayBuffer); mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; extension='xlsx';
     } else {
       const pdf=await PDFDocument.create(); let page=pdf.addPage(); const font=await pdf.embedFont(StandardFonts.Helvetica); let y=page.getHeight()-50;
-      const lines=['FARM FAMILY Backup Summary',`Family: ${body.family_id}`,`Export date: ${exportedAt}`,`Schema version: ${schemaVersion}`,`Records: ${total}`,...Object.entries(tableRows).map(([table,rows])=>`${table}: ${rows.length}`)];
-      for(const line of lines){ if(y<45){page=pdf.addPage();y=page.getHeight()-50;} page.drawText(line,{x:45,y,size:11,font});y-=20; }
+      const headings:Record<string,string>={fields:'Khet aur zameen',crops:'Fasal',crop_seasons:'Fasal ke mausam',seed_records:'Beej',fertilizer_records:'Khaad',labor_records:'Mazdoori',machinery_usage:'Machine ka istemal',expenses:'Kharch',harvest_records:'Fasal ki paidawar',sales:'Bikri',historical_prices:'Bazaar ke bhav',expense_categories:'Kharch ki categories'};
+      const lines=['FARM FAMILY - Parivar ke kheti records',`Tayyar ki tareekh: ${exportedAt}`,`Kul records: ${total}`];
+      for(const [table,rows] of Object.entries(tableRows)) {
+        lines.push('',`${headings[table]??table} (${rows.length})`);
+        for(const row of rows) {
+          const values=Object.entries(row).filter(([key,value])=>!['id','family_id','user_id','recorded_by','deleted_at','created_at','updated_at','version'].includes(key)&&value!==null&&value!==undefined&&value!=='').map(([key,value])=>`${key.replaceAll('_',' ')}: ${typeof value==='object'?JSON.stringify(value):String(value)}`);
+          if(values.length) lines.push(`- ${values.join(' | ')}`);
+        }
+      }
+      for(const rawLine of lines){
+        const line=rawLine.replace(/[^\x20-\xFF]/g,'?');
+        for(let offset=0;offset<line.length;offset+=105){ if(y<45){page=pdf.addPage();y=page.getHeight()-50;} page.drawText(line.slice(offset,offset+105),{x:40,y,size:8,font,maxWidth:page.getWidth()-80});y-=13; }
+      }
       bytes=await pdf.save(); mime='application/pdf'; extension='pdf';
     }
     if(bytes.byteLength>50*1024*1024) return json(413,{error:{code:'BACKUP_SIZE_LIMIT_EXCEEDED'}});

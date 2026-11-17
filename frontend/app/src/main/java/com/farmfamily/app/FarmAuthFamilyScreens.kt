@@ -74,9 +74,9 @@ internal fun FarmAuthenticationScreen(
     ) {
         Surface(shape = RoundedCornerShape(14.dp), color = FarmForest, modifier = Modifier.size(52.dp)) {
             androidx.compose.foundation.Image(
-                painter = androidx.compose.ui.res.painterResource(R.drawable.farm_family_mark),
+                painter = androidx.compose.ui.res.painterResource(R.drawable.farm_family_login_mark),
                 contentDescription = "FARM FAMILY mark",
-                modifier = Modifier.padding(5.dp)
+                modifier = Modifier.fillMaxSize()
             )
         }
         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {

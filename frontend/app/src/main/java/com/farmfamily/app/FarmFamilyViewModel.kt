@@ -53,13 +53,31 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
     private val farm = SupabaseFarmRepository(application)
     private val _state = androidx.compose.runtime.mutableStateOf(FarmUiState())
     private val preferences = application.getSharedPreferences("farm_family_preferences", Context.MODE_PRIVATE)
-    val darkMode = androidx.compose.runtime.mutableStateOf(preferences.getBoolean("dark_mode", false))
+    private val autoNightEnabled = androidx.compose.runtime.mutableStateOf(preferences.getBoolean("auto_night_mode", true))
+    val darkMode = androidx.compose.runtime.mutableStateOf(
+        if (autoNightEnabled.value) isNightTime() else preferences.getBoolean("dark_mode", false)
+    )
     val hindiLanguage = androidx.compose.runtime.mutableStateOf(
         preferences.getBoolean("hindi_language", preferences.getBoolean("awadhi_language", false))
     )
     val state: androidx.compose.runtime.State<FarmUiState> = _state
 
-    fun setDarkMode(enabled: Boolean) { darkMode.value = enabled; preferences.edit().putBoolean("dark_mode", enabled).apply() }
+    fun setDarkMode(enabled: Boolean) {
+        autoNightEnabled.value = false
+        darkMode.value = enabled
+        preferences.edit().putBoolean("auto_night_mode", false).putBoolean("dark_mode", enabled).apply()
+    }
+    fun setAutoNightMode(enabled: Boolean) {
+        autoNightEnabled.value = enabled
+        preferences.edit().putBoolean("auto_night_mode", enabled).apply()
+        if (enabled) darkMode.value = isNightTime()
+    }
+    fun isAutoNightModeEnabled(): Boolean = autoNightEnabled.value
+
+    private fun isNightTime(): Boolean {
+        val hour = java.time.LocalTime.now().hour
+        return hour >= 19 || hour < 6
+    }
     fun setHindiLanguage(enabled: Boolean) { hindiLanguage.value = enabled; preferences.edit().putBoolean("hindi_language", enabled).apply() }
     private var started = false
     private var pendingSyncJob: Job? = null
@@ -460,8 +478,11 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
         row.optString("table_name")
     }) { state, table -> state.copy(recycleRecords = state.recycleRecords.orEmpty().filterNot { it.optString("id") == row.optString("id") && it.optString("table_name") == table }, messages = state.messages + ("recycle_bin" to "Record restored.")) }
 
-    fun exportBackup(format: String) = task("backups", { farm.exportBackup(token(), familyId(), format) }) { state, result ->
-        state.copy(backupRecords = null, messages = state.messages + ("backups" to result))
+    fun exportBackup(format: String) = task("backups", {
+        val message = farm.exportBackup(token(), familyId(), format)
+        message to farm.loadBackups(token(), familyId())
+    }) { state, result ->
+        state.copy(backupRecords = result.second, messages = state.messages + ("backups" to result.first))
     }
 
     fun prepareBackupDownload(id: String, onUrl: (String) -> Unit) {
@@ -517,10 +538,11 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
     fun uploadAvatar(uri: Uri) = task("avatar", {
         val session = _state.value.authSession ?: error("Sign in again to change your profile picture.")
         val path = farm.uploadProfileAvatar(session.accessToken, uri)
+        val url = farm.profileAvatarUrl(session.accessToken, path)
         auth.updateAvatarPath(session.accessToken, path)
-        path
-    }) { state, path ->
-        state.copy(authSession = state.authSession?.copy(avatarPath = path), avatarUrl = null, messages = state.messages + ("profile" to "Profile picture saved to your account."))
+        path to url
+    }) { state, (path, url) ->
+        state.copy(authSession = state.authSession?.copy(avatarPath = path), avatarUrl = url, messages = state.messages + ("profile" to "Profile picture saved to your account."))
     }
 
     fun removeAvatar() = task("avatar", {

@@ -23,7 +23,8 @@ data class AuthSession(
     val userId: String,
     val email: String,
     val displayName: String = "",
-    val avatarPath: String? = null
+    val avatarPath: String? = null,
+    val createdAt: String = ""
 )
 
 class SupabaseAuthRepository(context: Context) {
@@ -96,7 +97,8 @@ class SupabaseAuthRepository(context: Context) {
                 ?.optString("full_name")
                 .orEmpty()
                 .ifBlank { user.optJSONObject("user_metadata")?.optString("name").orEmpty() },
-            avatarPath = user.optJSONObject("user_metadata")?.optString("avatar_path")?.takeIf(String::isNotBlank)
+            avatarPath = user.optJSONObject("user_metadata")?.optString("avatar_path")?.takeIf(String::isNotBlank),
+            createdAt = user.optString("created_at")
         )
         sessionStore.save(session)
         return AuthCallback(session, parameters["type"] == "recovery")
@@ -141,7 +143,8 @@ class SupabaseAuthRepository(context: Context) {
                     ?.optString("full_name")
                     .orEmpty()
                     .ifBlank { saved.displayName },
-                avatarPath = user.optJSONObject("user_metadata")?.optString("avatar_path")?.takeIf(String::isNotBlank)
+                avatarPath = user.optJSONObject("user_metadata")?.optString("avatar_path")?.takeIf(String::isNotBlank),
+                createdAt = user.optString("created_at", saved.createdAt)
             ).also(sessionStore::save)
         } catch (error: SupabaseAuthException) {
             if (error.statusCode != 401) throw error
@@ -189,7 +192,8 @@ class SupabaseAuthRepository(context: Context) {
             userId,
             user.optString("email"),
             metadata?.optString("full_name").orEmpty().ifBlank { metadata?.optString("name").orEmpty() },
-            metadata?.optString("avatar_path")?.takeIf(String::isNotBlank)
+            metadata?.optString("avatar_path")?.takeIf(String::isNotBlank),
+            user.optString("created_at")
         )
     }
 

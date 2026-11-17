@@ -116,6 +116,15 @@ class SupabaseFarmRepository(context: android.content.Context) {
             .put("family_id", familyId)
             .put("local_id", UUID.randomUUID().toString())
         val localId = body.getString("local_id")
+        val relationFields = RELATION_FIELDS[table].orEmpty()
+        val relatedIds = relationFields.mapNotNull { key -> body.optString(key).takeIf(String::isNotBlank)?.let { key to it } }
+        if (relatedIds.any { (_, id) -> id.startsWith("local_") }) {
+            localStore.queueRecordCreate(familyId, table, localId, body)
+            return JSONObject(body.toString()).put("id", "local_$localId").put("sync_status", "PENDING")
+        }
+        if (relatedIds.any { (_, id) -> !UUID_PATTERN.matches(id) }) {
+            throw IllegalArgumentException("Choose a valid related family record, then save again.")
+        }
         val raw = try {
             request("rest/v1/$table", "POST", accessToken, body, "return=representation")
         } catch (error: NetworkUnavailableException) {
@@ -140,6 +149,7 @@ class SupabaseFarmRepository(context: android.content.Context) {
             "seed_records", "fertilizer_records", "labor_records", "machinery_usage", "expenses", "harvest_records" ->
                 listOf("crop_seasons") + if (table == "expenses") listOf("expense_categories") else emptyList()
             "sales" -> listOf("crop_seasons", "harvest_records")
+            "historical_prices" -> listOf("crops")
             else -> emptyList()
         }
         dependencies.forEach { dependency -> syncPendingRecordCreates(accessToken, familyId, dependency, visited) }
@@ -346,15 +356,16 @@ class SupabaseFarmRepository(context: android.content.Context) {
     }
 
     fun uploadProfileAvatar(accessToken: String, uri: android.net.Uri): String {
-        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        appContext.contentResolver.openInputStream(uri)?.use { android.graphics.BitmapFactory.decodeStream(it, null, bounds) }
+        val source = appContext.contentResolver.openInputStream(uri)?.use { it.readBytes() }
             ?: throw IOException("The selected profile picture could not be opened.")
+        require(source.isNotEmpty() && source.size <= 20_000_000) { "Choose an image smaller than 20 MB." }
+        val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        android.graphics.BitmapFactory.decodeByteArray(source, 0, source.size, bounds)
         require(bounds.outWidth > 0 && bounds.outHeight > 0 && bounds.outWidth <= 12000 && bounds.outHeight <= 12000) { "Choose a valid image up to 12,000 pixels wide or high." }
         var sample = 1
         while (bounds.outWidth / sample > 1024 || bounds.outHeight / sample > 1024) sample *= 2
-        val decoded = appContext.contentResolver.openInputStream(uri)?.use {
-            android.graphics.BitmapFactory.decodeStream(it, null, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
-        } ?: throw IOException("The selected profile picture could not be decoded.")
+        val decoded = android.graphics.BitmapFactory.decodeByteArray(source, 0, source.size, android.graphics.BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: throw IOException("The selected profile picture could not be decoded.")
         val scaled = if (decoded.width > 512 || decoded.height > 512) {
             val ratio = minOf(512f / decoded.width, 512f / decoded.height)
             android.graphics.Bitmap.createScaledBitmap(decoded, (decoded.width * ratio).toInt().coerceAtLeast(1), (decoded.height * ratio).toInt().coerceAtLeast(1), true).also { if (it !== decoded) decoded.recycle() }
@@ -788,6 +799,8 @@ class SupabaseFarmRepository(context: android.content.Context) {
             ?: error?.optString("msg")?.takeIf(String::isNotBlank)
         val code = nested?.optString("code")?.takeIf(String::isNotBlank)
             ?: error?.optString("code")?.takeIf(String::isNotBlank)
+        val providerStatus = nested?.optInt("provider_status", 0)?.takeIf { it in 100..599 }
+        if (providerStatus != null) Log.w("FarmFamily", "AI provider rejected the request: HTTP $providerStatus")
         if (!code.isNullOrBlank()) Log.w("FarmFamily", "Supabase request failed: HTTP $status, code=$code")
         if (serverMessage.isNullOrBlank()) return friendlyStatus(status)
         val diagnostic = "$code $serverMessage".lowercase()
@@ -807,9 +820,18 @@ class SupabaseFarmRepository(context: android.content.Context) {
                 path.contains("farm-weather") -> "Weather is not configured on the production service. Check the OpenWeather key in the GitHub production environment."
                 else -> friendlyStatus(status)
             }
-            "AI_UPSTREAM_ERROR", "AI_TIMEOUT" -> "The AI provider did not respond. Check the OpenAI key and account status in the GitHub production environment."
+            "AI_UPSTREAM_ERROR" -> when (providerStatus) {
+                401, 403 -> "OpenAI rejected the configured key. Replace OPENAI_API_KEY in the GitHub production environment, then redeploy the backend."
+                400 -> "OpenAI rejected the model or request. Check OPENAI_MODEL in the GitHub production environment."
+                else -> "OpenAI could not complete the request${providerStatus?.let { " (HTTP $it)" }.orEmpty()}. Check the key, model, and account status."
+            }
+            "AI_TIMEOUT" -> "The AI provider did not respond in time. Try again when the connection is stable."
             "WEATHER_PROVIDER_UNAVAILABLE" -> "The weather provider did not respond. Check the OpenWeather key and account status in the GitHub production environment."
             "RATE_LIMITED" -> "The family has reached its AI usage limit for now. Try again later."
+            "22P02", "23503", "CROSS_FAMILY_REFERENCE" -> "Choose a related item from this family. If it is missing, add it first and then save this record."
+            "23502" -> "Complete the required details before saving this record."
+            "23505" -> "This item already exists in this family. Choose a different name or edit the existing record."
+            "23514" -> "One or more values are outside the allowed range. Review the form and try again."
             "FAMILY_ACCESS_DENIED", "OWNER_REQUIRED", "EDITOR_REQUIRED", "ADD_PERMISSION_REQUIRED", "EDIT_PERMISSION_REQUIRED", "DELETE_PERMISSION_REQUIRED" -> "Your family role does not allow this action."
             "INVALID_INVITATION", "INVITATION_EXPIRED", "INVITATION_REVOKED", "INVITATION_ALREADY_USED" -> "This invitation is no longer valid. Ask the family owner for a new one."
             "RECORD_NOT_FOUND" -> "This record is no longer available. Refresh the list and try again."
@@ -840,5 +862,16 @@ class SupabaseFarmRepository(context: android.content.Context) {
             "labor_records", "machinery_usage", "expenses", "harvest_records", "sales", "historical_prices"
         )
         val SAFE_COLUMNS = setOf("name", "season_name", "expense_date", "harvest_date", "sold_on", "observed_on", "created_at", "work_date", "applied_on", "purchased_on", "usage_date")
+        val RELATION_FIELDS = mapOf(
+            "crop_seasons" to listOf("field_id", "crop_id"),
+            "seed_records" to listOf("crop_season_id"),
+            "fertilizer_records" to listOf("crop_season_id"),
+            "labor_records" to listOf("crop_season_id"),
+            "machinery_usage" to listOf("crop_season_id"),
+            "expenses" to listOf("category_id", "crop_season_id"),
+            "harvest_records" to listOf("crop_season_id"),
+            "sales" to listOf("crop_season_id", "harvest_record_id"),
+            "historical_prices" to listOf("crop_id")
+        )
     }
 }

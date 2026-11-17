@@ -129,6 +129,7 @@ internal class FarmLocalStore(context: Context) :
                         "crop_seasons" -> listOf("field_id", "crop_id")
                         "seed_records", "fertilizer_records", "labor_records", "machinery_usage", "expenses", "harvest_records" -> listOf("crop_season_id") + if (table == "expenses") listOf("category_id") else emptyList()
                         "sales" -> listOf("crop_season_id", "harvest_record_id")
+                        "historical_prices" -> listOf("crop_id")
                         else -> emptyList()
                     }
                     var changed = false

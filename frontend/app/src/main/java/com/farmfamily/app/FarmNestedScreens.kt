@@ -79,7 +79,8 @@ internal fun FarmNestedRoute(
         "recycle_bin" -> FarmRecycleBinScreen(modifier, state, viewModel)
         "profile" -> FarmProfileScreen(modifier, state, viewModel)
         "family_settings" -> FarmFamilySettingsScreen(modifier, state, viewModel)
-        "settings" -> FarmSettingsScreen(modifier, viewModel, onSignOut)
+        "settings" -> FarmSettingsScreen(modifier, viewModel, onSignOut) { onNavigate("contact") }
+        "contact" -> FarmContactScreen(modifier)
         "family" -> FarmFamilyInfoScreen(modifier, state, viewModel)
         "signout" -> { LaunchedEffect(Unit) { onSignOut() }; FarmEmptyState("Signing out", "Your family records remain saved.", null, {}) }
         "report" -> FarmReportModuleScreen(bits.getOrNull(1).orEmpty().let { if (it == "harvest") "harvest_records" else it }, modifier, state, viewModel, onNavigate)
@@ -329,7 +330,10 @@ private fun FarmQuickAddScreen(modifier: Modifier, navigate: (String) -> Unit) {
 
 @Composable
 private fun FarmMembersScreen(modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel) {
-    LaunchedEffect(state.family?.id, state.family?.role) { vm.loadMembers(includeRemoved = state.family?.role == "OWNER") }
+    LaunchedEffect(state.family?.id, state.family?.role) {
+        vm.loadMembers(includeRemoved = state.family?.role == "OWNER")
+        if (state.family?.role == "OWNER") vm.loadInvitations()
+    }
     var editing by remember { mutableStateOf<FamilyMemberRecord?>(null) }
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { FarmText("Family members", style = MaterialTheme.typography.headlineSmall, color = FarmForest); FarmText("Choose who can view, add, change, or remove shared records.", color = FarmMuted) }
@@ -340,6 +344,17 @@ private fun FarmMembersScreen(modifier: Modifier, state: FarmUiState, vm: FarmFa
                 FarmText(member.name, style = MaterialTheme.typography.titleMedium, color = FarmInk)
                 FarmText("${member.role.lowercase().replaceFirstChar { it.uppercase() }} · ${if (member.removed) "Access removed" else "${if (member.canView) "Can view" else "No view"}, ${if (member.canAdd) "add" else "no add"}, ${if (member.canEdit) "edit" else "no edit"}, ${if (member.canDelete) "delete" else "no delete"}"}", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
                 if (state.family?.role == "OWNER") TextButton(onClick = { editing = member }) { FarmText(if (member.removed) "Restore access" else "Manage access") }
+            }
+        }
+        if (state.family?.role == "OWNER") {
+            item { FarmSectionTitle("INVITATIONS", "Pending and accepted") }
+            state.errors["invitations"]?.let { item { FarmNotice(it, true) } }
+            if (state.invitations.isNullOrEmpty()) item { FarmInlineNote("No family invitations yet. Open Invitations to create one.") }
+            items(state.invitations.orEmpty(), key = { "invite:${it.id}" }) { invite ->
+                Column(Modifier.fillMaxWidth().background(FarmWhite).padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FarmText("${invite.role} · ${invite.status}", style = MaterialTheme.typography.titleSmall, color = FarmForest)
+                    FarmText("Expires ${invite.expiresAt}", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+                }
             }
         }
     }
@@ -431,9 +446,11 @@ private fun FarmBackupScreen(modifier: Modifier, state: FarmUiState, vm: FarmFam
         item { TextButton(onClick = vm::loadBackups) { FarmText("Refresh backups") } }
         item { Button(onClick = { vm.exportBackup("ZIP") }, modifier = Modifier.fillMaxWidth()) { FarmText("Create restorable ZIP backup") } }
         item { Button(onClick = { vm.exportBackup("CSV") }, modifier = Modifier.fillMaxWidth()) { FarmText("Create CSV export") } }
+        item { Button(onClick = { vm.exportBackup("PDF") }, modifier = Modifier.fillMaxWidth()) { FarmText("Create detailed PDF report (Hinglish)") } }
         item { TextButton(onClick = { importPicker.launch(arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed")) }, enabled = state.family?.role == "OWNER") { FarmText("Import a ZIP backup") } }
         state.messages["backups"]?.let { item { FarmNotice(it) } }; state.errors["backups"]?.let { item { FarmNotice(it, true) } }
         item { FarmSectionTitle("AVAILABLE BACKUPS") }
+        if (state.backupRecords.isNullOrEmpty() && "backups" !in state.loading) item { FarmEmptyState("No backups available yet", "Create a ZIP, CSV, or PDF backup to see it here.", null, {}) }
         items(state.backupRecords.orEmpty(), key = { it.id }) { backup ->
             Column(Modifier.fillMaxWidth().background(FarmWhite).padding(12.dp)) {
                 FarmText("${backup.format} backup", color = FarmForest); FarmText(backup.createdAt, color = FarmMuted)
@@ -463,7 +480,8 @@ private fun FarmProfileScreen(modifier: Modifier, state: FarmUiState, vm: FarmFa
     var name by rememberSaveable { mutableStateOf(state.authSession?.displayName.orEmpty()) }
     var email by rememberSaveable { mutableStateOf(state.authSession?.email.orEmpty()) }
     var password by rememberSaveable { mutableStateOf("") }
-    val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let(vm::uploadAvatar)
     }
     LaunchedEffect(state.authSession?.avatarPath) { if (state.authSession?.avatarPath != null) vm.loadAvatar() }
@@ -484,7 +502,7 @@ private fun FarmProfileScreen(modifier: Modifier, state: FarmUiState, vm: FarmFa
                     modifier = Modifier.size(112.dp).clip(androidx.compose.foundation.shape.CircleShape).background(FarmLeaf),
                     contentAlignment = androidx.compose.ui.Alignment.Center
                 ) { FarmText(name.firstOrNull()?.uppercase() ?: "F", style = MaterialTheme.typography.headlineLarge, color = FarmForest) }
-                TextButton(onClick = { avatarPicker.launch(arrayOf("image/*")) }, enabled = "avatar" !in state.loading) { FarmText(farmLabel(if (state.authSession?.avatarPath == null) "Choose profile picture" else "Change profile picture", vm.hindiLanguage.value)) }
+                TextButton(onClick = { avatarPicker.launch("image/*") }, enabled = "avatar" !in state.loading) { FarmText(farmLabel(if (state.authSession?.avatarPath == null) "Choose profile picture" else "Change profile picture", vm.hindiLanguage.value)) }
                 if (state.authSession?.avatarPath != null) TextButton(onClick = vm::removeAvatar, enabled = "avatar" !in state.loading) { FarmText(farmLabel("Remove picture", vm.hindiLanguage.value)) }
                 if ("avatar" in state.loading) FarmLoadingRow("Saving profile picture…")
             }
@@ -540,14 +558,39 @@ private fun FarmFamilyInfoScreen(modifier: Modifier, state: FarmUiState, vm: Far
 }
 
 @Composable
-private fun FarmSettingsScreen(modifier: Modifier, vm: FarmFamilyViewModel, signOut: () -> Unit) {
+private fun FarmSettingsScreen(modifier: Modifier, vm: FarmFamilyViewModel, signOut: () -> Unit, onContact: () -> Unit) {
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { FarmText(farmLabel("Settings", vm.hindiLanguage.value), style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
         item { FarmInlineNote(farmLabel("Records sync securely with the family workspace. Drafts and connectivity status are shown where available.", vm.hindiLanguage.value)) }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { FarmText(farmLabel("Automatic night theme", vm.hindiLanguage.value), color = FarmInk); androidx.compose.material3.Switch(checked = vm.isAutoNightModeEnabled(), onCheckedChange = vm::setAutoNightMode) } }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { FarmText(farmLabel("Dark theme", vm.hindiLanguage.value), color = FarmInk); androidx.compose.material3.Switch(checked = vm.darkMode.value, onCheckedChange = vm::setDarkMode) } }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { FarmText(farmLabel("Hindi language", vm.hindiLanguage.value), color = FarmInk); androidx.compose.material3.Switch(checked = vm.hindiLanguage.value, onCheckedChange = vm::setHindiLanguage) } }
         item { FarmText("FARM FAMILY · Version ${BuildConfig.VERSION_NAME}", color = FarmMuted) }
+        item { TextButton(onClick = onContact) { FarmText("Contact me") } }
         item { TextButton(onClick = signOut) { FarmText(farmLabel("Sign out", vm.hindiLanguage.value)) } }
+    }
+}
+
+@Composable
+private fun FarmContactScreen(modifier: Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var error by rememberSaveable { mutableStateOf<String?>(null) }
+    fun openLink(url: String) {
+        error = null
+        try {
+            context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+        } catch (_: android.content.ActivityNotFoundException) {
+            error = "No compatible app or browser is available on this phone."
+        }
+    }
+    LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item { FarmText("Contact me", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item { FarmText("Choose a platform to open my profile or message me.", color = FarmMuted) }
+        item { Button(onClick = { openLink("https://www.instagram.com/fauzan_the_fear/") }, modifier = Modifier.fillMaxWidth()) { FarmText("Instagram") } }
+        item { Button(onClick = { openLink("https://wa.me/9779704201062") }, modifier = Modifier.fillMaxWidth()) { FarmText("WhatsApp") } }
+        item { Button(onClick = { openLink("https://www.tiktok.com/@fauzan_shah.official") }, modifier = Modifier.fillMaxWidth()) { FarmText("TikTok") } }
+        item { Button(onClick = { openLink("mailto:farmfamily928@gmail.com") }, modifier = Modifier.fillMaxWidth()) { FarmText("Email: farmfamily928@gmail.com") } }
+        error?.let { item { FarmNotice(it, true) } }
     }
 }
 
@@ -585,6 +628,7 @@ private fun FarmReportModuleScreen(table: String, modifier: Modifier, state: Far
     val currentMonth = LocalDate.now().monthValue
     var selectedYear by rememberSaveable(table) { mutableStateOf(currentYear) }
     var selectedMonth by rememberSaveable(table) { mutableStateOf(currentMonth) }
+    val firstReportYear = state.authSession?.createdAt?.take(4)?.toIntOrNull()?.coerceIn(1900, currentYear) ?: currentYear
     var showMonthMenu by rememberSaveable(table) { mutableStateOf(false) }
     val pickerState = rememberDatePickerState(yearRange = 2000..currentYear)
     LaunchedEffect(table, from, to, state.records[table]) { vm.loadReportRecords(table, from.takeIf(String::isNotBlank), to.takeIf(String::isNotBlank)) }
@@ -593,7 +637,7 @@ private fun FarmReportModuleScreen(table: String, modifier: Modifier, state: Far
         item { FarmText("${module.title} analysis", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
         if (table in setOf("expenses", "sales", "harvest_records", "historical_prices")) item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                FarmYearPicker(selectedYear) { year ->
+                FarmYearPicker(selectedYear, firstReportYear) { year ->
                     selectedYear = year
                     val month = selectedMonth.coerceAtMost(if (year == currentYear) currentMonth else 12)
                     selectedMonth = month

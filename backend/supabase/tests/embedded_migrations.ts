@@ -8,6 +8,7 @@ try {
     create role authenticated;
     create role service_role;
     create schema auth;
+    create schema extensions;
     create table auth.users(id uuid primary key, raw_user_meta_data jsonb not null default '{}'::jsonb);
     create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
     create schema storage;
@@ -18,8 +19,11 @@ try {
     create function public.digest(bytea,text) returns bytea language sql immutable as $$ select convert_to(md5(encode($1,'hex')),'UTF8') $$;
     create function public.digest(text,text) returns bytea language sql immutable as $$ select public.digest(convert_to($1,'UTF8'),$2) $$;
     create function public.gen_random_bytes(integer) returns bytea language sql volatile as $$ select decode(substr(repeat(md5(random()::text),ceil($1/16.0)::integer),1,$1*2),'hex') $$;
+    create function extensions.digest(bytea,text) returns bytea language sql immutable as $$ select public.digest($1,$2) $$;
+    create function extensions.digest(text,text) returns bytea language sql immutable as $$ select public.digest($1,$2) $$;
+    create function extensions.gen_random_bytes(integer) returns bytea language sql volatile as $$ select public.gen_random_bytes($1) $$;
   `);
-  for (const name of ['202611140001_farm_family.sql','202611140002_secure_operations.sql','202611140004_unit_safe_harvest_reports.sql','202611140005_finance_currency_validation.sql','20261117032903_family_member_roster.sql','20261117072159_harden_security_definer_privileges.sql','20261117073707_restore_weather_quota_schema.sql','20261117084500_family_area_preferences.sql','20261117090000_reload_postgrest_schema.sql']) {
+  for (const name of ['202611140001_farm_family.sql','202611140002_secure_operations.sql','202611140004_unit_safe_harvest_reports.sql','202611140005_finance_currency_validation.sql','20261117032903_family_member_roster.sql','20261117072159_harden_security_definer_privileges.sql','20261117073707_restore_weather_quota_schema.sql','20261117084500_family_area_preferences.sql','20261117090000_reload_postgrest_schema.sql','20261117100000_seed_expense_categories.sql','20261117110000_fix_family_link_category_id_trigger.sql','20261117120000_fix_invitation_crypto_search_path.sql']) {
     const source = await Deno.readTextFile(`supabase/migrations/${name}`);
     const sql = source.replace(/^create extension if not exists pgcrypto;\s*/m, '-- pgcrypto stubbed for embedded migration syntax validation.\n');
     await db.exec(sql);
@@ -45,6 +49,9 @@ try {
   const expectReject=async(label:string,fn:()=>Promise<unknown>)=>{let rejected=false;try{await fn()}catch{rejected=true}if(!rejected)throw new Error(`Expected rejection: ${label}`);console.log(`PASS ${label}`)};
   await actor(a); await db.exec('set role authenticated');
   const familyA=(await q(`select public.create_family('Family A','NPR') id`)).rows[0].id as string;
+  const seededCategories=(await q(`select count(*)::int n from public.expense_categories where family_id=$1 and is_custom=false`,[familyA])).rows[0].n;
+  if(seededCategories!==10)throw new Error(`New family did not receive its 10 default expense categories (found ${seededCategories})`);
+  console.log('PASS new families receive usable default expense categories');
   await db.exec('reset role'); await actor(b); await db.exec('set role authenticated');
   const familyB=(await q(`select public.create_family('Family B','NPR') id`)).rows[0].id as string;
   await db.exec('reset role'); await actor(a); await db.exec('set role authenticated');

@@ -108,10 +108,11 @@ private fun requestDeviceLocation(context: Context, onLocation: (Location) -> Un
 }
 
 @Composable
-internal fun FarmYearPicker(selectedYear: Int, onSelectYear: (Int) -> Unit) {
+internal fun FarmYearPicker(selectedYear: Int, accountCreatedYear: Int, onSelectYear: (Int) -> Unit) {
     var showOlderYears by rememberSaveable { mutableStateOf(false) }
     val currentYear = java.time.Year.now().value
-    val recentYears = (currentYear - 2..currentYear).filter { it >= 2000 }
+    val firstYear = accountCreatedYear.coerceIn(1900, currentYear)
+    val recentYears = (maxOf(firstYear, currentYear - 2)..currentYear).toList()
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         recentYears.forEach { year ->
             FilterChip(
@@ -121,16 +122,18 @@ internal fun FarmYearPicker(selectedYear: Int, onSelectYear: (Int) -> Unit) {
                 modifier = Modifier.weight(1f)
             )
         }
-        androidx.compose.foundation.layout.Box {
-            TextButton(onClick = { showOlderYears = true }, contentPadding = PaddingValues(horizontal = 5.dp)) {
-                FarmText(if (selectedYear !in recentYears) selectedYear.toString() else "More", maxLines = 1)
-            }
-            androidx.compose.material3.DropdownMenu(expanded = showOlderYears, onDismissRequest = { showOlderYears = false }) {
-                (2000 until currentYear - 2).reversed().forEach { year ->
-                    androidx.compose.material3.DropdownMenuItem(
-                        text = { FarmText(year.toString()) },
-                        onClick = { showOlderYears = false; onSelectYear(year) }
-                    )
+        if (firstYear < currentYear - 2) {
+            androidx.compose.foundation.layout.Box {
+                TextButton(onClick = { showOlderYears = true }, contentPadding = PaddingValues(horizontal = 5.dp)) {
+                    FarmText(if (selectedYear !in recentYears) selectedYear.toString() else "More", maxLines = 1)
+                }
+                androidx.compose.material3.DropdownMenu(expanded = showOlderYears, onDismissRequest = { showOlderYears = false }) {
+                    (firstYear until currentYear - 2).reversed().forEach { year ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { FarmText(year.toString()) },
+                            onClick = { showOlderYears = false; onSelectYear(year) }
+                        )
+                    }
                 }
             }
         }
@@ -441,6 +444,7 @@ private fun FarmModuleRow(module: FarmModule, count: Int?, onClick: () -> Unit) 
 internal fun FarmReportsScreen(
     modifier: Modifier,
     family: FamilyMembership,
+    firstReportYear: Int,
     report: YearFarmReport?,
     loading: Boolean,
     error: String?,
@@ -455,7 +459,7 @@ internal fun FarmReportsScreen(
             FarmText("Reports", style = MaterialTheme.typography.headlineMedium, color = FarmForest)
             FarmText("A clear view of the work your family has recorded.", style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
         }
-        item { FarmYearPicker(selectedYear) { selectedYear = it; onSelectYear(it) } }
+        item { FarmYearPicker(selectedYear, firstReportYear) { selectedYear = it; onSelectYear(it) } }
         when {
             loading -> item { FarmLoadingRow("Loading family reports…") }
             error != null -> item { FarmInlineErrorCard(error, onRetry) }
