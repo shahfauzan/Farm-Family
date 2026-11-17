@@ -125,6 +125,13 @@ class SupabaseFarmRepository(context: android.content.Context) {
         return rows.optJSONObject(0) ?: JSONObject(body.toString())
     }
 
+    fun syncPendingRecordsForFamily(accessToken: String, familyId: String): List<String> {
+        val pendingTables = localStore.pendingRecordTables(familyId)
+        val visited = mutableSetOf<String>()
+        pendingTables.forEach { table -> syncPendingRecordCreates(accessToken, familyId, table, visited) }
+        return pendingTables
+    }
+
     private fun syncPendingRecordCreates(accessToken: String, familyId: String, table: String, visited: MutableSet<String>) {
         if (!visited.add(table)) return
         val dependencies = when (table) {

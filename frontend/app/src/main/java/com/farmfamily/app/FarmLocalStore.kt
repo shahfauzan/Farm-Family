@@ -108,6 +108,10 @@ internal class FarmLocalStore(context: Context) :
         "pending_record_creates", arrayOf("local_id", "payload", "sync_status"), "family_id=? AND table_name=?", arrayOf(familyId, table), null, null, "created_at ASC"
     ).use { cursor -> buildList { while (cursor.moveToNext()) runCatching { cursor.getString(0) to JSONObject(cursor.getString(1)).put("_local_sync_status", cursor.getString(2)) }.getOrNull()?.let(::add) } }
 
+    fun pendingRecordTables(familyId: String): List<String> = readableDatabase.query(
+        true, "pending_record_creates", arrayOf("table_name"), "family_id=?", arrayOf(familyId), null, null, "table_name ASC", null
+    ).use { cursor -> buildList { while (cursor.moveToNext()) cursor.getString(0)?.let(::add) } }
+
     fun markPendingRecordFailed(familyId: String, table: String, localId: String) {
         writableDatabase.update("pending_record_creates", ContentValues().apply { put("sync_status", "FAILED") }, "family_id=? AND table_name=? AND local_id=?", arrayOf(familyId, table, localId))
     }

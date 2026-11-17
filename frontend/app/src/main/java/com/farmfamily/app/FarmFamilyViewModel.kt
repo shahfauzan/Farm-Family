@@ -1,9 +1,15 @@
 package com.farmfamily.app
 
 import android.app.Application
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -46,6 +52,41 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
     private val _state = androidx.compose.runtime.mutableStateOf(FarmUiState())
     val state: androidx.compose.runtime.State<FarmUiState> = _state
     private var started = false
+    private var pendingSyncJob: Job? = null
+    private val connectivityManager = application.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+            if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) syncPendingRecords()
+        }
+    }
+
+    init {
+        runCatching { connectivityManager.registerNetworkCallback(NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), networkCallback) }
+    }
+
+    override fun onCleared() {
+        runCatching { connectivityManager.unregisterNetworkCallback(networkCallback) }
+        super.onCleared()
+    }
+
+    private fun syncPendingRecords() {
+        val family = _state.value.family ?: return
+        val session = _state.value.authSession ?: return
+        if (pendingSyncJob?.isActive == true) return
+        pendingSyncJob = viewModelScope.launch {
+            try {
+                val tables = withContext(Dispatchers.IO) { farm.syncPendingRecordsForFamily(session.accessToken, family.id) }
+                if (_state.value.family?.id == family.id && _state.value.authSession?.userId == session.userId) {
+                    update { it.copy(errors = it.errors - "sync") }
+                    tables.forEach(::loadRecords)
+                }
+            } catch (_: Exception) {
+                if (_state.value.family?.id == family.id) {
+                    update { it.copy(errors = it.errors + ("sync" to "Some saved changes could not sync yet. Open the affected record list to retry.")) }
+                }
+            }
+        }
+    }
 
     private class RecordConflictException(val details: JSONObject) : IllegalStateException("This record changed on another device. Review the latest version before saving again.")
 

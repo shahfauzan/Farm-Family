@@ -188,6 +188,7 @@ internal fun FarmHomeScreen(
                 Text("A shared place for your family’s farm work.", style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
             }
         }
+        errors["sync"]?.let { message -> item { FarmNotice(message, true) } }
         item {
             Surface(shape = RoundedCornerShape(16.dp), color = FarmForest, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
