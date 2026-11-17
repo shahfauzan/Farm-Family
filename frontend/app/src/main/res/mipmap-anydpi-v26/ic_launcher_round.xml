@@ -1,4 +1,4 @@
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-    <background android:drawable="@color/farm_family_forest" />
+    <background android:drawable="@color/farm_family_icon_background" />
     <foreground android:drawable="@drawable/farm_family_mark" />
 </adaptive-icon>

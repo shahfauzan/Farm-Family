@@ -529,9 +529,9 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
         auth.updateAvatarPath(session.accessToken, "")
     }) { state, _ -> state.copy(authSession = state.authSession?.copy(avatarPath = null), avatarUrl = null, messages = state.messages + ("profile" to "Profile picture removed.")) }
 
-    fun updateFamily(name: String, currency: String) = task("family_settings", {
-        farm.updateFamilyName(token(), familyId(), name, currency)
-    }) { state, _ -> state.copy(family = state.family?.copy(name = name.trim(), currency = currency), messages = state.messages + ("family_settings" to "Family name and currency saved.")) }
+    fun updateFamily(name: String, currency: String, defaultAreaUnit: String) = task("family_settings", {
+        farm.updateFamilyName(token(), familyId(), name, currency, defaultAreaUnit)
+    }) { state, _ -> state.copy(family = state.family?.copy(name = name.trim(), currency = currency, defaultAreaUnit = defaultAreaUnit), messages = state.messages + ("family_settings" to "Family settings saved.")) }
 
     private fun token(): String = _state.value.authSession?.accessToken ?: error("Sign in again to continue.")
     private fun familyId(): String = _state.value.family?.id ?: error("Choose a family to continue.")

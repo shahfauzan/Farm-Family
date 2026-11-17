@@ -110,7 +110,12 @@ private fun FarmRecordForm(table: String, mode: String, recordId: String?, modif
     var formReady by rememberSaveable(table, recordId) { mutableStateOf(false) }
     LaunchedEffect(table, recordId) { vm.clearRecordMessage(table); vm.clearConflict(); formReady = true }
     LaunchedEffect(formReady, state.messages[table]) { if (formReady && state.messages[table] in setOf("Changes saved.", "Saved on this device. It will sync when you’re online.")) back() }
-    val values = remember(table, recordId) { mutableStateMapOf<String, String>().apply { putAll(existing?.toInputValues(module).orEmpty()) } }
+    val values = remember(table, recordId, state.family?.id, state.family?.defaultAreaUnit) {
+        mutableStateMapOf<String, String>().apply {
+            putAll(existing?.toInputValues(module).orEmpty())
+            if (table == "fields" && existing == null) put("area_unit", state.family?.defaultAreaUnit ?: "Bigha")
+        }
+    }
     var validation by rememberSaveable(table, recordId) { mutableStateOf<String?>(null) }
     val family = state.family
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -479,12 +484,28 @@ private fun FarmProfileScreen(modifier: Modifier, state: FarmUiState, vm: FarmFa
 @Composable
 private fun FarmFamilySettingsScreen(modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel) {
     var name by rememberSaveable(state.family?.id) { mutableStateOf(state.family?.name.orEmpty()) }
+    var areaUnit by rememberSaveable(state.family?.id) { mutableStateOf(state.family?.defaultAreaUnit ?: "Bigha") }
+    var areaUnitMenu by rememberSaveable(state.family?.id) { mutableStateOf(false) }
     val currency = "NPR"
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { FarmText("Family settings", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
         item { OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { FarmText("Family name") }, singleLine = true, enabled = state.family?.role == "OWNER") }
         item { FarmText("Family currency: $currency", color = FarmMuted) }
-        if (state.family?.role == "OWNER") item { Button(onClick = { vm.updateFamily(name, currency) }, modifier = Modifier.fillMaxWidth()) { FarmText("Save family") } }
+        item {
+            Column {
+                FarmText("Default field area unit", color = FarmInk)
+                androidx.compose.foundation.layout.Box {
+                    TextButton(onClick = { areaUnitMenu = true }, enabled = state.family?.role == "OWNER") { FarmText(areaUnit) }
+                    DropdownMenu(expanded = areaUnitMenu, onDismissRequest = { areaUnitMenu = false }) {
+                        listOf("Bigha", "Kattha", "Dhur", "Acre", "Hectare", "Square metre").forEach { unit ->
+                            DropdownMenuItem(text = { FarmText(unit) }, onClick = { areaUnit = unit; areaUnitMenu = false })
+                        }
+                    }
+                }
+            }
+        }
+        if (state.family?.role == "OWNER") item { Button(onClick = { vm.updateFamily(name, currency, areaUnit) }, modifier = Modifier.fillMaxWidth(), enabled = "family_settings" !in state.loading) { FarmText("Save family") } }
+        if ("family_settings" in state.loading) item { FarmLoadingRow("Saving family settings…") }
         else item { FarmText("Family currency: $currency", color = FarmMuted) }
         state.messages["family_settings"]?.let { item { FarmNotice(it) } }; state.errors["family_settings"]?.let { item { FarmNotice(it, true) } }
     }
@@ -544,16 +565,58 @@ private fun FarmReportModuleScreen(table: String, modifier: Modifier, state: Far
     var to by rememberSaveable(table) { mutableStateOf("") }
     var pickerFor by rememberSaveable(table) { mutableStateOf<String?>(null) }
     val currentYear = LocalDate.now().year
+    val currentMonth = LocalDate.now().monthValue
+    var selectedYear by rememberSaveable(table) { mutableStateOf(currentYear) }
+    var selectedMonth by rememberSaveable(table) { mutableStateOf(currentMonth) }
+    var showYearMenu by rememberSaveable(table) { mutableStateOf(false) }
+    var showMonthMenu by rememberSaveable(table) { mutableStateOf(false) }
     val pickerState = rememberDatePickerState(yearRange = 2000..currentYear)
     LaunchedEffect(table, from, to, state.records[table]) { vm.loadReportRecords(table, from.takeIf(String::isNotBlank), to.takeIf(String::isNotBlank)) }
     val rows = state.reportRecords[table].orEmpty()
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         item { FarmText("${module.title} analysis", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
         if (table in setOf("expenses", "sales", "harvest_records", "historical_prices")) item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { pickerFor = "from" }) { FarmText(from.ifBlank { "From date" }) }
-                TextButton(onClick = { pickerFor = "to" }) { FarmText(to.ifBlank { "To date" }) }
-                if (from.isNotBlank() || to.isNotBlank()) TextButton(onClick = { from = ""; to = "" }) { FarmText("Clear") }
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    androidx.compose.foundation.layout.Box {
+                        TextButton(onClick = { showYearMenu = true }) { FarmText("Year: $selectedYear") }
+                        DropdownMenu(expanded = showYearMenu, onDismissRequest = { showYearMenu = false }) {
+                            (2000..currentYear).reversed().forEach { year -> DropdownMenuItem(
+                                text = { FarmText(year.toString()) }, onClick = {
+                                    selectedYear = year
+                                    val month = selectedMonth.coerceAtMost(if (year == currentYear) currentMonth else 12)
+                                    selectedMonth = month
+                                    val start = LocalDate.of(year, month, 1)
+                                    from = start.toString()
+                                    to = minOf(start.withDayOfMonth(start.lengthOfMonth()), LocalDate.now()).toString()
+                                    showYearMenu = false
+                                }
+                            ) }
+                        }
+                    }
+                    androidx.compose.foundation.layout.Box {
+                        TextButton(onClick = { showMonthMenu = true }) {
+                            FarmText(java.time.Month.of(selectedMonth).getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH))
+                        }
+                        DropdownMenu(expanded = showMonthMenu, onDismissRequest = { showMonthMenu = false }) {
+                            (1..if (selectedYear == currentYear) currentMonth else 12).forEach { month -> DropdownMenuItem(
+                                text = { FarmText(java.time.Month.of(month).getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.ENGLISH)) },
+                                onClick = {
+                                    selectedMonth = month
+                                    val start = LocalDate.of(selectedYear, month, 1)
+                                    from = start.toString()
+                                    to = minOf(start.withDayOfMonth(start.lengthOfMonth()), LocalDate.now()).toString()
+                                    showMonthMenu = false
+                                }
+                            ) }
+                        }
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { pickerFor = "from" }) { FarmText(from.ifBlank { "From date" }) }
+                    TextButton(onClick = { pickerFor = "to" }) { FarmText(to.ifBlank { "To date" }) }
+                    if (from.isNotBlank() || to.isNotBlank()) TextButton(onClick = { from = ""; to = ""; selectedYear = currentYear; selectedMonth = currentMonth }) { FarmText("Clear") }
+                }
             }
         }
         if (from.isNotBlank() && to.isNotBlank() && from > to) item { FarmNotice("The start date must be on or before the end date.", true) }
@@ -579,6 +642,8 @@ private fun FarmReportModuleScreen(table: String, modifier: Modifier, state: Far
                 val selected = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate().toString()
                 if (LocalDate.parse(selected) <= LocalDate.now()) {
                     if (pickerFor == "from") from = selected else to = selected
+                    selectedYear = LocalDate.parse(selected).year
+                    selectedMonth = LocalDate.parse(selected).monthValue
                 }
             }
             pickerFor = null

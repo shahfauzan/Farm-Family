@@ -28,6 +28,15 @@ private val HindiLabels = mapOf(
     "Sales" to "बिक्री", "Historical prices" to "पुराने बाज़ार भाव", "Expense categories" to "खर्च की श्रेणियाँ",
     "Settings" to "सेटिंग", "Profile" to "प्रोफ़ाइल", "Family members" to "परिवार के सदस्य",
     "Family settings" to "परिवार की सेटिंग", "Invitations" to "निमंत्रण", "Notifications" to "सूचनाएँ",
+    "Family settings saved." to "परिवार की सेटिंग सहेजी गई।", "Saving family settings…" to "परिवार की सेटिंग सहेजी जा रही है…",
+    "Default field area unit" to "खेत के रकबे की सामान्य इकाई", "Choose a supported area unit." to "रकबे की दी गई इकाइयों में से चुनें।",
+    "Save family" to "परिवार की जानकारी सहेजें", "Year" to "साल", "Month" to "महीना",
+    "January" to "जनवरी", "February" to "फ़रवरी", "March" to "मार्च", "April" to "अप्रैल",
+    "May" to "मई", "June" to "जून", "July" to "जुलाई", "August" to "अगस्त",
+    "September" to "सितंबर", "October" to "अक्टूबर", "November" to "नवंबर", "December" to "दिसंबर",
+    "OWNER" to "मालिक", "Owner" to "मालिक", "EDITOR" to "संपादक", "Editor" to "संपादक",
+    "VIEWER" to "केवल देखने वाला", "Viewer" to "केवल देखने वाला", "PENDING" to "बाकी",
+    "ACCEPTED" to "स्वीकार किया", "REVOKED" to "रद्द किया", "EXPIRED" to "समय समाप्त",
     "Backup & restore" to "बैकअप और पुनर्स्थापना", "Recycle bin" to "रीसायकल बिन", "Search records" to "रिकॉर्ड खोजें",
     "Add a farm record" to "खेती का रिकॉर्ड जोड़ें", "Record details" to "रिकॉर्ड की जानकारी", "Edit record" to "रिकॉर्ड बदलें",
     "Add record" to "रिकॉर्ड जोड़ें", "Save record" to "रिकॉर्ड सहेजें", "Save" to "सहेजें", "Cancel" to "रद्द करें",
@@ -43,6 +52,7 @@ private val HindiLabels = mapOf(
     "Work date" to "काम की तारीख", "Number of workers" to "मजदूरों की संख्या", "Hours" to "घंटे", "Work description" to "काम का विवरण",
     "Service" to "सेवा", "Provider" to "सेवा देने वाला", "What was the expense?" to "किस बात का खर्च हुआ?",
     "Category" to "श्रेणी", "Expense date" to "खर्च की तारीख", "Unit price" to "इकाई का दाम", "Harvest date" to "कटाई की तारीख",
+    "Bigha" to "बीघा", "Kattha" to "कट्ठा", "Dhur" to "धुर", "Acre" to "एकड़", "Hectare" to "हेक्टेयर", "Square metre" to "वर्ग मीटर",
     "Grade" to "गुणवत्ता", "Sale date" to "बिक्री की तारीख", "Price per unit" to "हर इकाई का दाम", "Total amount" to "कुल रकम",
     "Buyer" to "खरीदार", "Observed on" to "भाव दर्ज करने की तारीख", "Market" to "बाज़ार", "Price unit" to "भाव की इकाई",
     "Price" to "भाव", "Source" to "स्रोत", "Category name" to "श्रेणी का नाम", "Custom category" to "अपनी श्रेणी",
@@ -219,10 +229,12 @@ internal fun translateFarmText(text: String, hindi: Boolean): String {
         text.startsWith("YEARLY SUMMARY · ") -> "साल का सार · " + text.removePrefix("YEARLY SUMMARY · ")
         text.startsWith("You opened version ") -> "आपने संस्करण " + text.removePrefix("You opened version ")
         text.startsWith("Invitation code: ") -> "निमंत्रण कोड: " + text.removePrefix("Invitation code: ")
+        text.startsWith("Latest saved values: ") -> "दूसरे डिवाइस पर सहेजी जानकारी: " + text.removePrefix("Latest saved values: ")
         text.startsWith("Expires ") -> "समाप्ति: " + text.removePrefix("Expires ")
         text.endsWith(" backup") -> "बैकअप · " + text.removeSuffix(" backup")
         text.endsWith(" records in this report") -> text.removeSuffix(" records in this report") + " रिकॉर्ड इस रिपोर्ट में"
-        text.endsWith(" analysis") -> text.removeSuffix(" analysis") + " का विश्लेषण"
+        text.endsWith(" analysis") -> (HindiLabels[text.removeSuffix(" analysis")] ?: text.removeSuffix(" analysis")) + " का विश्लेषण"
+        text.startsWith("Year: ") -> "साल: " + text.removePrefix("Year: ")
         text.contains(" · ") -> text.split(" · ").joinToString(" · ") { HindiLabels[it] ?: it }
         else -> text
     }

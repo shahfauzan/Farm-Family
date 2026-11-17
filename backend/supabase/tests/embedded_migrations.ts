@@ -19,7 +19,7 @@ try {
     create function public.digest(text,text) returns bytea language sql immutable as $$ select public.digest(convert_to($1,'UTF8'),$2) $$;
     create function public.gen_random_bytes(integer) returns bytea language sql volatile as $$ select decode(substr(repeat(md5(random()::text),ceil($1/16.0)::integer),1,$1*2),'hex') $$;
   `);
-  for (const name of ['202611140001_farm_family.sql','202611140002_secure_operations.sql','202611140004_unit_safe_harvest_reports.sql','202611140005_finance_currency_validation.sql','20261117032903_family_member_roster.sql','20261117072159_harden_security_definer_privileges.sql','20261117073707_restore_weather_quota_schema.sql']) {
+  for (const name of ['202611140001_farm_family.sql','202611140002_secure_operations.sql','202611140004_unit_safe_harvest_reports.sql','202611140005_finance_currency_validation.sql','20261117032903_family_member_roster.sql','20261117072159_harden_security_definer_privileges.sql','20261117073707_restore_weather_quota_schema.sql','20261117084500_family_area_preferences.sql']) {
     const source = await Deno.readTextFile(`supabase/migrations/${name}`);
     const sql = source.replace(/^create extension if not exists pgcrypto;\s*/m, '-- pgcrypto stubbed for embedded migration syntax validation.\n');
     await db.exec(sql);
@@ -30,9 +30,11 @@ try {
       has_function_privilege('anon','public.create_family(text,character)','EXECUTE') as anon_create,
       has_function_privilege('authenticated','public.create_family(text,character)','EXECUTE') as user_create,
       has_function_privilege('authenticated','public.is_family_member(uuid)','EXECUTE') as policy_helper,
-      has_function_privilege('authenticated','public.audit_row()','EXECUTE') as trigger_only
+      has_function_privilege('authenticated','public.audit_row()','EXECUTE') as trigger_only,
+      has_function_privilege('anon','public.update_family_settings(uuid,text,text,text)','EXECUTE') as anon_family_settings,
+      has_function_privilege('authenticated','public.update_family_settings(uuid,text,text,text)','EXECUTE') as user_family_settings
   `)).rows[0];
-  if (rpcAcl.anon_create || !rpcAcl.user_create || !rpcAcl.policy_helper || rpcAcl.trigger_only) {
+  if (rpcAcl.anon_create || !rpcAcl.user_create || !rpcAcl.policy_helper || rpcAcl.trigger_only || rpcAcl.anon_family_settings || !rpcAcl.user_family_settings) {
     throw new Error(`Unexpected SECURITY DEFINER function grants: ${JSON.stringify(rpcAcl)}`);
   }
   console.log('PASS SECURITY DEFINER RPC grants');
@@ -46,6 +48,11 @@ try {
   await db.exec('reset role'); await actor(b); await db.exec('set role authenticated');
   const familyB=(await q(`select public.create_family('Family B','NPR') id`)).rows[0].id as string;
   await db.exec('reset role'); await actor(a); await db.exec('set role authenticated');
+  await q(`select public.update_family_settings($1,'Family A Updated','NPR','Kattha')`,[familyA]);
+  const savedSettings=(await q(`select name,settings->>'default_area_unit' area_unit,currency from public.families where id=$1`,[familyA])).rows[0];
+  if(savedSettings.name!=='Family A Updated'||savedSettings.area_unit!=='Kattha'||savedSettings.currency!=='NPR')throw new Error('Family preferences did not persist');
+  console.log('PASS owner family settings persist while preserving NPR');
+  await expectReject('non-owner cannot update family settings',()=>q(`select public.update_family_settings($1,'Not Allowed','NPR','Acre')`,[familyB]));
   for(let i=0;i<60;i++){
     const allowed=(await q(`select public.consume_weather_quota($1) allowed`,[familyA])).rows[0].allowed;
     if(!allowed)throw new Error(`Weather quota rejected request ${i+1} below its limit`);

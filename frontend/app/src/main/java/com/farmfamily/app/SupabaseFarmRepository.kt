@@ -18,7 +18,8 @@ data class FamilyMembership(
     val canView: Boolean,
     val canAdd: Boolean,
     val canEdit: Boolean,
-    val canDelete: Boolean
+    val canDelete: Boolean,
+    val defaultAreaUnit: String = "Bigha"
 )
 
 data class FarmFieldRecord(
@@ -329,11 +330,12 @@ class SupabaseFarmRepository(context: android.content.Context) {
             JSONObject().put("display_name", displayName.trim()), "return=minimal")
     }
 
-    fun updateFamilyName(accessToken: String, familyId: String, name: String, currency: String) {
+    fun updateFamilyName(accessToken: String, familyId: String, name: String, currency: String, defaultAreaUnit: String) {
         require(name.trim().isNotBlank() && name.trim().length <= 160) { "Enter a family name up to 160 characters." }
         require(currency == "NPR") { "Family currency is set to NPR." }
-        request("rest/v1/families?id=eq.$familyId", "PATCH", accessToken,
-            JSONObject().put("name", name.trim()).put("currency", currency), "return=minimal")
+        require(defaultAreaUnit in AREA_UNITS) { "Choose a supported area unit." }
+        request("rest/v1/rpc/update_family_settings", "POST", accessToken,
+            JSONObject().put("p_family", familyId).put("p_name", name.trim()).put("p_currency", currency).put("p_default_area_unit", defaultAreaUnit))
     }
 
     fun loadWeather(accessToken: String, familyId: String, latitude: Double, longitude: Double): JSONObject {
@@ -396,7 +398,7 @@ class SupabaseFarmRepository(context: android.content.Context) {
         val idFilter = ids.joinToString(",")
         val families = JSONArray(
             request(
-                "rest/v1/families?select=id,name,currency&id=in.($idFilter)&deleted_at=is.null",
+                "rest/v1/families?select=id,name,currency,settings&id=in.($idFilter)&deleted_at=is.null",
                 "GET",
                 accessToken
             )
@@ -416,7 +418,8 @@ class SupabaseFarmRepository(context: android.content.Context) {
                 canView = membership.optBoolean("can_view"),
                 canAdd = membership.optBoolean("can_add"),
                 canEdit = membership.optBoolean("can_edit"),
-                canDelete = membership.optBoolean("can_delete")
+                canDelete = membership.optBoolean("can_delete"),
+                defaultAreaUnit = family.optJSONObject("settings")?.optString("default_area_unit")?.takeIf { it in AREA_UNITS } ?: "Bigha"
             )
         }
     }
@@ -818,6 +821,7 @@ class SupabaseFarmRepository(context: android.content.Context) {
         java.net.URLEncoder.encode(value, StandardCharsets.UTF_8.name())
 
     private companion object {
+        val AREA_UNITS = setOf("Bigha", "Kattha", "Dhur", "Acre", "Hectare", "Square metre")
         val UUID_PATTERN = Regex("^[0-9a-fA-F-]{36}$")
         val RECORD_TABLES = setOf(
             "fields", "crops", "crop_seasons", "expense_categories", "seed_records", "fertilizer_records",

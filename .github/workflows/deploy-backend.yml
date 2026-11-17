@@ -1,0 +1,107 @@
+name: Deploy FARM FAMILY backend
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "backend/supabase/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: farm-family-backend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Apply Supabase production backend
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF || 'wkeotktsjwoejspyhprs' }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENWEATHER_API_KEY: ${{ secrets.OPENWEATHER_API_KEY }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+    steps:
+      - name: Check out production source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install backend tools
+        run: npm ci
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Validate weather requests
+        working-directory: backend
+        run: deno test supabase/functions/farm-weather/validation.test.ts
+
+      - name: Validate database migrations and security contracts
+        working-directory: backend
+        run: deno run --node-modules-dir=auto --allow-read supabase/tests/embedded_migrations.ts
+
+      - name: Verify deployment credentials
+        shell: bash
+        run: |
+          if [[ -z "$SUPABASE_ACCESS_TOKEN" || -z "$SUPABASE_DB_PASSWORD" ]]; then
+            echo "::error::Add SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD to the GitHub production environment."
+            exit 1
+          fi
+          if [[ "$SUPABASE_PROJECT_REF" != "wkeotktsjwoejspyhprs" ]]; then
+            echo "::error::SUPABASE_PROJECT_REF does not match the configured production project."
+            exit 1
+          fi
+
+      - name: Link production project
+        working-directory: backend
+        run: npx --no-install supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Apply Supabase Auth redirect configuration
+        working-directory: backend
+        run: npx --no-install supabase config push --remote "$SUPABASE_PROJECT_REF" --yes
+
+      - name: Check pending database migrations
+        working-directory: backend
+        run: npx --no-install supabase db push --dry-run --linked
+
+      - name: Apply database migrations
+        working-directory: backend
+        run: npx --no-install supabase db push --linked --yes
+
+      - name: Sync configured provider secrets to Supabase
+        working-directory: backend
+        shell: bash
+        run: |
+          secret_args=()
+          if [[ -n "$OPENAI_API_KEY" ]]; then
+            secret_args+=("OPENAI_API_KEY=$OPENAI_API_KEY")
+            secret_args+=("OPENAI_MODEL=${OPENAI_MODEL:-gpt-4.1-mini}")
+          fi
+          if [[ -n "$OPENWEATHER_API_KEY" ]]; then
+            secret_args+=("OPENWEATHER_API_KEY=$OPENWEATHER_API_KEY")
+          fi
+          if (( ${#secret_args[@]} )); then
+            npx --no-install supabase secrets set "${secret_args[@]}" --remote "$SUPABASE_PROJECT_REF"
+          else
+            echo "::warning::No OpenAI or OpenWeather key was configured; provider-dependent features may be unavailable."
+          fi
+
+      - name: Deploy Supabase Edge Functions
+        working-directory: backend
+        run: npx --no-install supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"

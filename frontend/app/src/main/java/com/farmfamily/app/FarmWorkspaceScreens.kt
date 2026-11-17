@@ -194,7 +194,7 @@ internal fun FarmHomeScreen(
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        FarmText(family.name, style = MaterialTheme.typography.headlineSmall, color = FarmWhite, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1)
+                        FarmText(family.name, style = MaterialTheme.typography.headlineMedium, color = FarmWhite, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1)
                             FarmText("${family.role.lowercase().replaceFirstChar { it.uppercase() }} · ${family.currency}", style = MaterialTheme.typography.bodySmall, color = FarmLeaf)
                         }
                         Surface(shape = CircleShape, color = FarmWhite.copy(alpha = 0.13f)) {
@@ -362,6 +362,7 @@ internal fun FarmReportsScreen(
     onNavigate: (String) -> Unit = {}
 ) {
     var selectedYear by rememberSaveable { mutableStateOf(java.time.Year.now().value) }
+    var showYearMenu by rememberSaveable { mutableStateOf(false) }
     val reportYear = report?.year
     LazyColumn(modifier, contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 88.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
@@ -369,9 +370,15 @@ internal fun FarmReportsScreen(
             FarmText("A clear view of the work your family has recorded.", style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ((selectedYear - 1).coerceAtLeast(2000)..selectedYear.coerceAtMost(java.time.Year.now().value)).forEach { year ->
-                    FilterChip(selected = year == (reportYear ?: selectedYear), onClick = { selectedYear = year; onSelectYear(year) }, label = { FarmText(year.toString()) })
+            androidx.compose.foundation.layout.Box {
+                TextButton(onClick = { showYearMenu = true }) { FarmText("Year: $selectedYear") }
+                androidx.compose.material3.DropdownMenu(expanded = showYearMenu, onDismissRequest = { showYearMenu = false }) {
+                    (2000..java.time.Year.now().value).reversed().forEach { year ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { FarmText(year.toString()) },
+                            onClick = { selectedYear = year; showYearMenu = false; onSelectYear(year) }
+                        )
+                    }
                 }
             }
         }
