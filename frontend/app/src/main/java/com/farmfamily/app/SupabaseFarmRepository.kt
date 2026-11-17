@@ -3,6 +3,7 @@ package com.farmfamily.app
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
+import android.util.Log
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -90,12 +91,22 @@ class SupabaseFarmRepository(context: android.content.Context) {
 
     fun loadRecords(accessToken: String, familyId: String, table: String, orderBy: String): List<JSONObject> {
         require(table in RECORD_TABLES) { "This record type is not supported." }
+        syncPendingRecordCreates(accessToken, familyId, table, mutableSetOf())
         val safeOrder = if (orderBy in SAFE_COLUMNS) orderBy else "created_at"
-        val rows = JSONArray(request(
-            "rest/v1/$table?select=*&family_id=eq.$familyId&deleted_at=is.null&order=$safeOrder.desc&limit=500",
-            "GET", accessToken
-        ))
-        return (0 until rows.length()).map { rows.getJSONObject(it) }
+        val rows = try {
+            val response = JSONArray(request(
+                "rest/v1/$table?select=*&family_id=eq.$familyId&deleted_at=is.null&order=$safeOrder.desc&limit=500",
+                "GET", accessToken
+            ))
+            (0 until response.length()).map { response.getJSONObject(it) }.also { localStore.cacheRecords(familyId, table, it) }
+        } catch (error: NetworkUnavailableException) {
+            localStore.cachedRecords(familyId, table).map { JSONObject(it.toString()).put("sync_status", "STALE") }
+        }
+        val pending = localStore.pendingRecordCreates(familyId, table).map { (localId, payload) ->
+            JSONObject(payload.toString()).put("id", "local_$localId").put("local_id", localId)
+                .put("sync_status", payload.optString("_local_sync_status", "PENDING"))
+        }
+        return pending + rows.filterNot { remote -> pending.any { it.optString("local_id") == remote.optString("local_id") } }
     }
 
     fun createRecord(accessToken: String, familyId: String, table: String, values: JSONObject): JSONObject {
@@ -103,9 +114,40 @@ class SupabaseFarmRepository(context: android.content.Context) {
         val body = JSONObject(values.toString())
             .put("family_id", familyId)
             .put("local_id", UUID.randomUUID().toString())
-        val raw = request("rest/v1/$table", "POST", accessToken, body, "return=representation")
+        val localId = body.getString("local_id")
+        val raw = try {
+            request("rest/v1/$table", "POST", accessToken, body, "return=representation")
+        } catch (error: NetworkUnavailableException) {
+            localStore.queueRecordCreate(familyId, table, localId, body)
+            return JSONObject(body.toString()).put("id", "local_$localId").put("sync_status", "PENDING")
+        }
         val rows = JSONArray(raw)
         return rows.optJSONObject(0) ?: JSONObject(body.toString())
+    }
+
+    private fun syncPendingRecordCreates(accessToken: String, familyId: String, table: String, visited: MutableSet<String>) {
+        if (!visited.add(table)) return
+        val dependencies = when (table) {
+            "crop_seasons" -> listOf("fields", "crops")
+            "seed_records", "fertilizer_records", "labor_records", "machinery_usage", "expenses", "harvest_records" ->
+                listOf("crop_seasons") + if (table == "expenses") listOf("expense_categories") else emptyList()
+            "sales" -> listOf("crop_seasons", "harvest_records")
+            else -> emptyList()
+        }
+        dependencies.forEach { dependency -> syncPendingRecordCreates(accessToken, familyId, dependency, visited) }
+        localStore.pendingRecordCreates(familyId, table).forEach { (localId, payload) ->
+            try {
+                payload.remove("_local_sync_status")
+                val raw = request("rest/v1/$table", "POST", accessToken, payload, "return=representation")
+                val serverId = JSONArray(raw).optJSONObject(0)?.optString("id").orEmpty()
+                if (serverId.isNotBlank()) localStore.remapPendingRecordReferences(familyId, localId, serverId)
+                localStore.removePendingRecordCreate(familyId, table, localId)
+            } catch (_: NetworkUnavailableException) {
+                return
+            } catch (_: SupabaseApiException) {
+                localStore.markPendingRecordFailed(familyId, table, localId)
+            }
+        }
     }
 
     fun updateRecord(
@@ -144,6 +186,38 @@ class SupabaseFarmRepository(context: android.content.Context) {
             "rest/v1/rpc/family_search", "POST", accessToken,
             JSONObject().put("p_family", familyId).put("p_query", query.trim()).put("p_limit", 50)
         ))
+        return (0 until rows.length()).map { rows.getJSONObject(it) }
+    }
+
+    fun loadReportRecords(accessToken: String, familyId: String, table: String, from: String?, to: String?): List<JSONObject> {
+        val rows = when (table) {
+            "expenses", "sales", "harvest_records" -> JSONArray(request(
+                "rest/v1/rpc/family_activity_report", "POST", accessToken,
+                JSONObject().put("p_family", familyId).put("p_kind", when (table) {
+                    "harvest_records" -> "harvest"
+                    else -> table
+                }).put("p_from", from ?: JSONObject.NULL).put("p_to", to ?: JSONObject.NULL).put("p_limit", 500)
+            ))
+            "fields" -> JSONArray(request("rest/v1/rpc/family_field_report", "POST", accessToken, JSONObject().put("p_family", familyId)))
+            "historical_prices" -> JSONArray(request(
+                "rest/v1/rpc/family_historical_price_report", "POST", accessToken,
+                JSONObject().put("p_family", familyId).put("p_crop", JSONObject.NULL)
+                    .put("p_from", from ?: JSONObject.NULL).put("p_to", to ?: JSONObject.NULL)
+            ))
+            "crops" -> JSONArray(request("rest/v1/rpc/family_crop_report", "POST", accessToken, JSONObject().put("p_family", familyId).put("p_crop", JSONObject.NULL)))
+            else -> throw IllegalArgumentException("This report is not available.")
+        }
+        return (0 until rows.length()).map { index ->
+            val result = rows.getJSONObject(index)
+            (result.optJSONObject("record") ?: result).let { row ->
+                if (table == "fields" && row.has("field_id")) JSONObject(row.toString()).put("id", row.optString("field_id")).put("name", row.optString("field_name")) else row
+            }
+        }
+    }
+
+    fun loadFinanceSummary(accessToken: String, familyId: String, from: String?, to: String?): List<JSONObject> {
+        val rows = JSONArray(request("rest/v1/rpc/family_finance_summary", "POST", accessToken,
+            JSONObject().put("p_family", familyId).put("p_from", from ?: JSONObject.NULL).put("p_to", to ?: JSONObject.NULL)))
         return (0 until rows.length()).map { rows.getJSONObject(it) }
     }
 
@@ -645,7 +719,7 @@ class SupabaseFarmRepository(context: android.content.Context) {
     private class NetworkUnavailableException(message: String, cause: Throwable) : IOException(message, cause)
 
     private fun errorMessage(status: Int, raw: String): String {
-        if (raw.isBlank()) return "Request failed ($status)."
+        if (raw.isBlank()) return friendlyStatus(status)
         val error = try {
             JSONObject(raw)
         } catch (_: JSONException) {
@@ -655,15 +729,31 @@ class SupabaseFarmRepository(context: android.content.Context) {
         val serverMessage = nested?.optString("message")?.takeIf(String::isNotBlank)
             ?: error?.optString("message")?.takeIf(String::isNotBlank)
             ?: error?.optString("msg")?.takeIf(String::isNotBlank)
-        if (serverMessage?.contains(Regex("\\b(\\d{5}|SQLSTATE)\\b", RegexOption.IGNORE_CASE)) == true) {
+        val code = nested?.optString("code")?.takeIf(String::isNotBlank)
+            ?: error?.optString("code")?.takeIf(String::isNotBlank)
+        if (!code.isNullOrBlank()) Log.w("FarmFamily", "Supabase request failed: HTTP $status, code=$code")
+        if (serverMessage.isNullOrBlank()) return friendlyStatus(status)
+        val diagnostic = "$code $serverMessage".lowercase()
+        if (diagnostic.contains(Regex("sqlstate|\\b[0-9a-f]{8}-[0-9a-f-]{27,}\\b")) ||
+            diagnostic.contains("schema cache") || diagnostic.contains("could not find the function") ||
+            diagnostic.contains("function public.") || diagnostic.contains("relation does not exist") ||
+            diagnostic.contains("does not exist") || diagnostic.contains("column ") && diagnostic.contains(" does not exist")) {
             return friendlyStatus(status)
         }
-        return serverMessage ?: friendlyStatus(status)
+        return when (code?.uppercase()) {
+            "FAMILY_ACCESS_DENIED", "OWNER_REQUIRED", "EDITOR_REQUIRED", "ADD_PERMISSION_REQUIRED", "EDIT_PERMISSION_REQUIRED", "DELETE_PERMISSION_REQUIRED" -> "Your family role does not allow this action."
+            "INVALID_INVITATION", "INVITATION_EXPIRED", "INVITATION_REVOKED", "INVITATION_ALREADY_USED" -> "This invitation is no longer valid. Ask the family owner for a new one."
+            "RECORD_NOT_FOUND" -> "This record is no longer available. Refresh the list and try again."
+            "VERSION_CONFLICT" -> "This record changed on another device. Review the latest version and try again."
+            else -> serverMessage.takeUnless { it.matches(Regex("[A-Z0-9_:-]{4,}")) } ?: friendlyStatus(status)
+        }
     }
 
     private fun friendlyStatus(status: Int): String = when (status) {
         401 -> "Your session has expired. Sign in again."
         403 -> "Your family role does not allow this action."
+        404 -> "This feature is temporarily unavailable. Please try again later."
+        400, 422 -> "Some details need attention. Review them and try again."
         409 -> "This record conflicts with a change made elsewhere."
         429 -> "Too many requests. Wait a moment and try again."
         in 500..599 -> "The family service is temporarily unavailable. Try again."

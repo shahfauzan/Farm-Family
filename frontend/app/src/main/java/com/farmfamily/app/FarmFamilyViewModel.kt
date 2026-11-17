@@ -20,6 +20,8 @@ internal data class FarmUiState(
     val family: FamilyMembership? = null,
     val familyError: String? = null,
     val records: Map<String, List<JSONObject>> = emptyMap(),
+    val reportRecords: Map<String, List<JSONObject>> = emptyMap(),
+    val financeReports: Map<String, List<JSONObject>> = emptyMap(),
     val loading: Set<String> = emptySet(),
     val errors: Map<String, String> = emptyMap(),
     val messages: Map<String, String> = emptyMap(),
@@ -240,8 +242,13 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
         update { it.copy(loading = it.loading + "${table}_$operation", errors = it.errors - table, messages = it.messages - table) }
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) { action() }
-                update { it.copy(loading = it.loading - "${table}_$operation", messages = it.messages + (table to if (operation == "delete") "Record moved to the family recycle history." else "Changes saved.")) }
+                val result = withContext(Dispatchers.IO) { action() }
+                val queuedOffline = result.optString("sync_status") == "PENDING"
+                update { it.copy(loading = it.loading - "${table}_$operation", messages = it.messages + (table to when {
+                    queuedOffline -> "Saved on this device. It will sync when you’re online."
+                    operation == "delete" -> "Record moved to the family recycle history."
+                    else -> "Changes saved."
+                })) }
                 loadRecords(table)
                 loadHomeSummary()
             } catch (error: Exception) {
@@ -309,6 +316,22 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
                     .put("subtitle", row.optString(spec?.secondaryLabel.orEmpty()))
             }
             state.copy(searchResults = normalized)
+        }
+    }
+
+    fun loadReportRecords(table: String, from: String?, to: String?) {
+        if (from != null && to != null && from > to) {
+            update { it.copy(errors = it.errors + ("report:$table" to "The start date must be on or before the end date.")) }
+            return
+        }
+        val key = "report:$table"
+        task(key, { farm.loadReportRecords(token(), familyId(), table, from, to) }) { state, records ->
+            state.copy(reportRecords = state.reportRecords + (table to records))
+        }
+        if (table in setOf("expenses", "sales")) {
+            task("finance:$table", { farm.loadFinanceSummary(token(), familyId(), from, to) }) { state, report ->
+                state.copy(financeReports = state.financeReports + (table to report))
+            }
         }
     }
 

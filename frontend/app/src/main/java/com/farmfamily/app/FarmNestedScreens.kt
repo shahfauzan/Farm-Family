@@ -12,6 +12,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -22,6 +28,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -35,6 +44,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.json.JSONObject
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 @Composable
 internal fun FarmNestedRoute(
@@ -49,7 +62,7 @@ internal fun FarmNestedRoute(
     val bits = route.split(':')
     when (bits[0]) {
         "module" -> FarmModuleScreen(bits.getOrNull(1).orEmpty(), modifier, state, viewModel, onNavigate)
-        "form" -> FarmRecordForm(bits.getOrNull(1).orEmpty(), bits.getOrNull(2).orEmpty(), bits.getOrNull(3), modifier, state, viewModel, onBack)
+        "form" -> FarmRecordForm(bits.getOrNull(1).orEmpty(), bits.getOrNull(2).orEmpty(), bits.getOrNull(3), modifier, state, viewModel, onBack, onNavigate)
         "detail" -> FarmRecordDetail(bits.getOrNull(1).orEmpty(), bits.getOrNull(2).orEmpty(), modifier, state, viewModel, onNavigate, onBack)
         "search" -> FarmSearchScreen(modifier, state, viewModel, onNavigate)
         "quick_add" -> FarmQuickAddScreen(modifier, onNavigate)
@@ -82,18 +95,18 @@ private fun FarmModuleScreen(table: String, modifier: Modifier, state: FarmUiSta
         items(rows.orEmpty(), key = { it.optString("id") }) { row ->
             val title = row.optString(module.primaryLabel).ifBlank { module.title.removeSuffix("s") }
             val subtitle = row.optString(module.secondaryLabel).takeIf { it.isNotBlank() && it != "null" }.orEmpty()
-            FarmRecordListRow(title, subtitle) { navigate("detail:$table:${row.optString("id")}") }
+            FarmRecordListRow(title, subtitle, row.optString("sync_status", "SYNCED")) { navigate("detail:$table:${row.optString("id")}") }
         }
     }
 }
 
 @Composable
-private fun FarmRecordForm(table: String, mode: String, recordId: String?, modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel, back: () -> Unit) {
+private fun FarmRecordForm(table: String, mode: String, recordId: String?, modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel, back: () -> Unit, navigate: (String) -> Unit) {
     val module = FarmModules.byTable(table) ?: return FarmEmptyState("Unknown record type", "This form is not available.", null, {})
     val existing = state.records[table].orEmpty().firstOrNull { it.optString("id") == recordId }
     var formReady by rememberSaveable(table, recordId) { mutableStateOf(false) }
     LaunchedEffect(table, recordId) { vm.clearRecordMessage(table); vm.clearConflict(); formReady = true }
-    LaunchedEffect(formReady, state.messages[table]) { if (formReady && state.messages[table] == "Changes saved.") back() }
+    LaunchedEffect(formReady, state.messages[table]) { if (formReady && state.messages[table] in setOf("Changes saved.", "Saved on this device. It will sync when you’re online.")) back() }
     val values = remember(table, recordId) { mutableStateMapOf<String, String>().apply { putAll(existing?.toInputValues(module).orEmpty()) } }
     var validation by rememberSaveable(table, recordId) { mutableStateOf<String?>(null) }
     val family = state.family
@@ -130,7 +143,30 @@ private fun FarmRecordForm(table: String, mode: String, recordId: String?, modif
                             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
                                 options.forEach { option -> DropdownMenuItem(text = { Text(option.optString(input.relationLabel)) }, onClick = { values[input.key] = option.optString("id"); expanded = false }) }
                             }
+                            input.relationTable?.takeIf { options.isEmpty() && it in setOf("crops", "fields") }?.let { relatedTable ->
+                                Text("No $relatedTable have been added yet.", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+                                TextButton(onClick = { navigate("form:$relatedTable:new") }) { Text("Add ${relatedTable.removeSuffix("s")}") }
+                            }
                         }
+                    }
+                    input.type == FarmInputType.DATE -> {
+                        var showPicker by remember(input.key) { mutableStateOf(false) }
+                        val initialMillis = values[input.key]?.let { raw -> runCatching { LocalDate.parse(raw).atStartOfDay().toInstant(ZoneOffset.UTC).toEpochMilli() }.getOrNull() }
+                        val pickerState = rememberDatePickerState(initialSelectedDateMillis = initialMillis)
+                        OutlinedTextField(
+                            value = values[input.key]?.let { raw -> runCatching { LocalDate.parse(raw).format(DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.getDefault())) }.getOrDefault(raw) }.orEmpty(),
+                            onValueChange = {}, modifier = Modifier.fillMaxWidth(),
+                            label = { Text(input.label + if (input.required) " *" else "") }, readOnly = true,
+                            trailingIcon = { TextButton(onClick = { showPicker = true }) { Text("Choose") } }
+                        )
+                        if (showPicker) DatePickerDialog(
+                            onDismissRequest = { showPicker = false },
+                            confirmButton = { TextButton(onClick = {
+                                pickerState.selectedDateMillis?.let { millis -> values[input.key] = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate().toString() }
+                                showPicker = false
+                            }) { Text("Set date") } },
+                            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("Cancel") } }
+                        ) { DatePicker(state = pickerState) }
                     }
                     else -> OutlinedTextField(
                         value = values[input.key].orEmpty(), onValueChange = { entered ->
@@ -200,6 +236,9 @@ private fun FarmRecordForm(table: String, mode: String, recordId: String?, modif
 @Composable
 private fun FarmRecordDetail(table: String, id: String, modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel, navigate: (String) -> Unit, back: () -> Unit) {
     val module = FarmModules.byTable(table) ?: return FarmEmptyState("Record unavailable", "This record type could not be opened.", null, {})
+    var confirmDelete by rememberSaveable(table, id) { mutableStateOf(false) }
+    LaunchedEffect(table, id) { vm.clearRecordMessage(table) }
+    LaunchedEffect(state.messages[table]) { if (state.messages[table] == "Record moved to the family recycle history.") back() }
     LaunchedEffect(table) { vm.loadRecords(table) }
     val row = state.records[table].orEmpty().firstOrNull { it.optString("id") == id }
     if (row == null) return FarmEmptyState("Record not found", "It may have been removed or you may no longer have access.", "Back", back)
@@ -217,22 +256,39 @@ private fun FarmRecordDetail(table: String, id: String, modifier: Modifier, stat
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (state.family?.canEdit == true) Button(onClick = { navigate("form:$table:edit:$id") }) { Text("Edit") }
-                if (state.family?.canDelete == true) TextButton(onClick = {
-                    vm.deleteRecord(table, id, row.optLong("record_version")); back()
-                }) { Text("Move to recycle history") }
+                if (state.family?.canDelete == true) TextButton(onClick = { confirmDelete = true }) { Text("Move to recycle history") }
             }
         }
         state.errors[table]?.let { item { FarmNotice(it, true) } }
+        if ("${table}_delete" in state.loading) item { FarmLoadingRow("Moving record to recycle history…") }
     }
+    if (confirmDelete) AlertDialog(
+        onDismissRequest = { if ("${table}_delete" !in state.loading) confirmDelete = false },
+        title = { Text("Move this record to recycle history?") },
+        text = { Text("Your family can review or restore it later if recovery is enabled.") },
+        confirmButton = { TextButton(enabled = "${table}_delete" !in state.loading, onClick = {
+            confirmDelete = false
+            vm.deleteRecord(table, id, row.optLong("record_version"))
+        }) { Text("Move record") } },
+        dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
+    )
 }
 
 @Composable
 private fun FarmSearchScreen(modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel, navigate: (String) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     var submitted by rememberSaveable { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
+    LaunchedEffect(Unit) { focusRequester.requestFocus(); keyboard?.show() }
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { OutlinedTextField(query, { query = it; submitted = false }, Modifier.fillMaxWidth(), label = { Text("Search farm records") }, singleLine = true) }
-        item { Button(onClick = { if (query.trim().length >= 2) { submitted = true; vm.search(query.trim()) } }, modifier = Modifier.fillMaxWidth()) { Text("Search") } }
+        item { OutlinedTextField(
+            value = query, onValueChange = { query = it; submitted = false }, modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+            label = { Text("Search farm records") }, singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { submitted = query.trim().length >= 2; if (submitted) vm.search(query.trim()); keyboard?.hide() }),
+            trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = ""; submitted = false }) { Text("Clear") } }
+        ) }
+        item { Button(onClick = { if (query.trim().length >= 2) { submitted = true; vm.search(query.trim()); keyboard?.hide() } }, modifier = Modifier.fillMaxWidth()) { Text("Search") } }
         if ("search" in state.loading) item { FarmLoadingRow("Searching your family records…") }
         state.errors["search"]?.let { item { FarmNotice(it, true) } }
         state.searchResults?.let { results ->
@@ -425,15 +481,46 @@ private fun FarmSettingsScreen(modifier: Modifier, signOut: () -> Unit) {
 @Composable
 private fun FarmReportModuleScreen(table: String, modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel, navigate: (String) -> Unit) {
     val module = FarmModules.byTable(table) ?: return FarmEmptyState("Report unavailable", "This report is not available.", null, {})
-    LaunchedEffect(table) { vm.loadRecords(table) }
-    val rows = state.records[table].orEmpty()
+    var from by rememberSaveable(table) { mutableStateOf("") }
+    var to by rememberSaveable(table) { mutableStateOf("") }
+    var pickerFor by rememberSaveable(table) { mutableStateOf<String?>(null) }
+    val pickerState = rememberDatePickerState()
+    LaunchedEffect(table, from, to, state.records[table]) { vm.loadReportRecords(table, from.takeIf(String::isNotBlank), to.takeIf(String::isNotBlank)) }
+    val rows = state.reportRecords[table].orEmpty()
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
         item { Text("${module.title} analysis", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
-        item { Text("${rows.size} records in the current family workspace", color = FarmMuted) }
-        if (table == "expenses" || table == "sales") {
-            val total = rows.sumOf { it.optDouble("amount", it.optDouble("total_amount", 0.0)) }
-            item { FarmMetricBlock("Recorded total", "${state.family?.currency.orEmpty()} ${farmNumber(total)}", Modifier.fillMaxWidth()) }
+        if (table in setOf("expenses", "sales", "harvest_records", "historical_prices")) item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { pickerFor = "from" }) { Text(from.ifBlank { "From date" }) }
+                TextButton(onClick = { pickerFor = "to" }) { Text(to.ifBlank { "To date" }) }
+                if (from.isNotBlank() || to.isNotBlank()) TextButton(onClick = { from = ""; to = "" }) { Text("Clear") }
+            }
         }
-        items(rows.take(100), key = { it.optString("id") }) { row -> FarmRecordListRow(row.optString(module.primaryLabel).ifBlank { module.title }, row.optString(module.secondaryLabel)) { navigate("detail:$table:${row.optString("id")}") } }
+        if (from.isNotBlank() && to.isNotBlank() && from > to) item { FarmNotice("The start date must be on or before the end date.", true) }
+        if ("report:$table" in state.loading || "finance:$table" in state.loading) item { FarmLoadingRow("Loading report…") }
+        state.errors["report:$table"]?.let { item { FarmInlineErrorCard(it) { vm.loadReportRecords(table, from.takeIf(String::isNotBlank), to.takeIf(String::isNotBlank)) } } }
+        state.errors["finance:$table"]?.let { item { FarmInlineErrorCard(it) { vm.loadReportRecords(table, from.takeIf(String::isNotBlank), to.takeIf(String::isNotBlank)) } } }
+        item { Text("${rows.size} records in this report", color = FarmMuted) }
+        state.financeReports[table].orEmpty().forEach { currencyRow ->
+            val amount = if (table == "sales") currencyRow.optDouble("revenue") else currencyRow.optDouble("cost")
+            item { FarmMetricBlock("${if (table == "sales") "Recorded sales" else "Recorded expenses"} · ${currencyRow.optString("currency")}", "${currencyRow.optString("currency")} ${farmNumber(amount)}", Modifier.fillMaxWidth()) }
+        }
+        if (rows.isEmpty() && "report:$table" !in state.loading) item { FarmEmptyState("No matching records", "Try another date range or add a record.", if (state.family?.canAdd == true) "Add record" else null) { navigate("form:$table:new") } }
+        items(rows.take(300), key = { it.optString("id", it.optString("crop_id", it.optString("field_id", it.optString("observed_on")))) }) { row ->
+            val label = row.optString(module.primaryLabel).ifBlank { row.optString("crop_name").ifBlank { row.optString("field_name").ifBlank { module.title } } }
+            val id = row.optString("id").ifBlank { row.optString("crop_id").ifBlank { row.optString("field_id") } }
+            FarmRecordListRow(label, row.optString(module.secondaryLabel)) { if (id.isNotBlank()) navigate("detail:$table:$id") }
+        }
     }
+    if (pickerFor != null) DatePickerDialog(
+        onDismissRequest = { pickerFor = null },
+        confirmButton = { TextButton(onClick = {
+            pickerState.selectedDateMillis?.let { millis ->
+                val selected = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate().toString()
+                if (pickerFor == "from") from = selected else to = selected
+            }
+            pickerFor = null
+        }) { Text("Set date") } },
+        dismissButton = { TextButton(onClick = { pickerFor = null }) { Text("Cancel") } }
+    ) { DatePicker(state = pickerState) }
 }

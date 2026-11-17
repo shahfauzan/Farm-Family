@@ -213,10 +213,14 @@ class SupabaseAuthRepository(context: Context) {
             val raw = stream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }.orEmpty()
             val response = if (raw.isBlank()) JSONObject() else JSONObject(raw)
             if (status !in 200..299) {
-                val message = response.optString("msg").ifBlank {
-                    response.optString("message").ifBlank {
-                        response.optString("error_description").ifBlank { "Request failed ($status)." }
-                    }
+                val code = response.optString("code").ifBlank { response.optString("error_code") }.lowercase()
+                val message = when {
+                    code == "email_exists" -> "This email already has an account. Sign in instead."
+                    status == 400 || status == 401 -> "Email or password is incorrect, or the request needs attention."
+                    status == 422 -> "The account could not be created. Check your details and try again."
+                    status == 429 -> "Too many attempts. Wait a little before trying again."
+                    status >= 500 -> "Sign-in is temporarily unavailable. Try again later."
+                    else -> "Authentication could not be completed. Check your details and try again."
                 }
                 throw SupabaseAuthException(status, message)
             }

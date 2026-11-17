@@ -66,9 +66,79 @@ internal class FarmLocalStore(context: Context) :
             )
             """.trimIndent()
         )
+        createGenericRecordTables(db)
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 3) createGenericRecordTables(db)
+    }
+
+    private fun createGenericRecordTables(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS farm_record_cache (family_id TEXT NOT NULL, table_name TEXT NOT NULL, record_id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(family_id,table_name,record_id))")
+        db.execSQL("CREATE TABLE IF NOT EXISTS pending_record_creates (family_id TEXT NOT NULL, table_name TEXT NOT NULL, local_id TEXT NOT NULL, payload TEXT NOT NULL, created_at INTEGER NOT NULL, sync_status TEXT NOT NULL DEFAULT 'PENDING', PRIMARY KEY(family_id,table_name,local_id))")
+    }
+
+    fun cacheRecords(familyId: String, table: String, records: List<JSONObject>) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("farm_record_cache", "family_id=? AND table_name=?", arrayOf(familyId, table))
+            records.forEach { record ->
+                val id = record.optString("id")
+                if (id.isNotBlank()) db.insertWithOnConflict("farm_record_cache", null, ContentValues().apply {
+                    put("family_id", familyId); put("table_name", table); put("record_id", id); put("payload", record.toString())
+                }, SQLiteDatabase.CONFLICT_REPLACE)
+            }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    fun cachedRecords(familyId: String, table: String): List<JSONObject> = readableDatabase.query(
+        "farm_record_cache", arrayOf("payload"), "family_id=? AND table_name=?", arrayOf(familyId, table), null, null, "rowid DESC"
+    ).use { cursor -> buildList { while (cursor.moveToNext()) runCatching { JSONObject(cursor.getString(0)) }.getOrNull()?.let(::add) } }
+
+    fun queueRecordCreate(familyId: String, table: String, localId: String, payload: JSONObject) {
+        writableDatabase.insertWithOnConflict("pending_record_creates", null, ContentValues().apply {
+            put("family_id", familyId); put("table_name", table); put("local_id", localId); put("payload", payload.toString())
+            put("created_at", System.currentTimeMillis()); put("sync_status", "PENDING")
+        }, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun pendingRecordCreates(familyId: String, table: String): List<Pair<String, JSONObject>> = readableDatabase.query(
+        "pending_record_creates", arrayOf("local_id", "payload", "sync_status"), "family_id=? AND table_name=?", arrayOf(familyId, table), null, null, "created_at ASC"
+    ).use { cursor -> buildList { while (cursor.moveToNext()) runCatching { cursor.getString(0) to JSONObject(cursor.getString(1)).put("_local_sync_status", cursor.getString(2)) }.getOrNull()?.let(::add) } }
+
+    fun markPendingRecordFailed(familyId: String, table: String, localId: String) {
+        writableDatabase.update("pending_record_creates", ContentValues().apply { put("sync_status", "FAILED") }, "family_id=? AND table_name=? AND local_id=?", arrayOf(familyId, table, localId))
+    }
+
+    fun remapPendingRecordReferences(familyId: String, localId: String, serverId: String) {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.query("pending_record_creates", arrayOf("table_name", "local_id", "payload"), "family_id=?", arrayOf(familyId), null, null, "created_at ASC").use { cursor ->
+                while (cursor.moveToNext()) {
+                    val table = cursor.getString(0)
+                    val pendingId = cursor.getString(1)
+                    val payload = JSONObject(cursor.getString(2))
+                    val keys = when (table) {
+                        "crop_seasons" -> listOf("field_id", "crop_id")
+                        "seed_records", "fertilizer_records", "labor_records", "machinery_usage", "expenses", "harvest_records" -> listOf("crop_season_id") + if (table == "expenses") listOf("category_id") else emptyList()
+                        "sales" -> listOf("crop_season_id", "harvest_record_id")
+                        else -> emptyList()
+                    }
+                    var changed = false
+                    keys.forEach { key -> if (payload.optString(key) == localId) { payload.put(key, serverId); changed = true } }
+                    if (changed) db.update("pending_record_creates", ContentValues().apply { put("payload", payload.toString()) }, "family_id=? AND table_name=? AND local_id=?", arrayOf(familyId, table, pendingId))
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally { db.endTransaction() }
+    }
+
+    fun removePendingRecordCreate(familyId: String, table: String, localId: String) {
+        writableDatabase.delete("pending_record_creates", "family_id=? AND table_name=? AND local_id=?", arrayOf(familyId, table, localId))
+    }
 
     fun cacheFields(familyId: String, fields: List<FarmFieldRecord>) {
         writableDatabase.beginTransaction()
@@ -280,6 +350,6 @@ internal class FarmLocalStore(context: Context) :
 
     private companion object {
         const val DATABASE_NAME = "farm_family_local.db"
-        const val DATABASE_VERSION = 2
+        const val DATABASE_VERSION = 3
     }
 }

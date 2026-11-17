@@ -559,6 +559,7 @@ internal fun FarmSyncPill(status: String) {
         else -> FarmLeaf
     }
     val label = when (status.uppercase()) {
+        "STALE" -> "Saved view"
         "PENDING" -> "Pending sync"
         "SYNCING" -> "Syncing"
         "FAILED" -> "Sync failed"
