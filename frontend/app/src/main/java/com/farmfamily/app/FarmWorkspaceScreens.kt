@@ -194,7 +194,7 @@ internal fun FarmHomeScreen(
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(family.name, style = MaterialTheme.typography.titleLarge, color = FarmWhite)
+                        Text(family.name, style = MaterialTheme.typography.headlineSmall, color = FarmWhite, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1)
                             Text("${family.role.lowercase().replaceFirstChar { it.uppercase() }} · ${family.currency}", style = MaterialTheme.typography.bodySmall, color = FarmLeaf)
                         }
                         Surface(shape = CircleShape, color = FarmWhite.copy(alpha = 0.13f)) {
@@ -370,7 +370,7 @@ internal fun FarmReportsScreen(
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                (selectedYear - 1..selectedYear + 1).forEach { year ->
+                ((selectedYear - 1).coerceAtLeast(2000)..selectedYear.coerceAtMost(java.time.Year.now().value)).forEach { year ->
                     FilterChip(selected = year == (reportYear ?: selectedYear), onClick = { selectedYear = year; onSelectYear(year) }, label = { Text(year.toString()) })
                 }
             }

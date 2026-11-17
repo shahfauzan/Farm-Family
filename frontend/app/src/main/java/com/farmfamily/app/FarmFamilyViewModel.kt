@@ -473,15 +473,28 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
 
     fun updateProfile(name: String) = task("profile", {
         val session = _state.value.authSession ?: error("Sign in again to update your profile.")
+        auth.updateProfile(session.accessToken, name.trim())
         farm.updateProfile(session.accessToken, session.userId, name)
     }) { state, _ ->
         val session = state.authSession
         state.copy(profileName = name.trim(), authSession = session?.copy(displayName = name.trim()), messages = state.messages + ("profile" to "Profile saved."))
     }
 
-    fun updateFamily(name: String) = task("family_settings", {
-        farm.updateFamilyName(token(), familyId(), name)
-    }) { state, _ -> state.copy(family = state.family?.copy(name = name.trim()), messages = state.messages + ("family_settings" to "Family name saved.")) }
+    fun updateAccount(name: String, email: String, password: String) = task("profile", {
+        val session = _state.value.authSession ?: error("Sign in again to update your account.")
+        auth.updateProfile(session.accessToken, name.trim())
+        farm.updateProfile(session.accessToken, session.userId, name.trim())
+        if (email.trim() != session.email) auth.updateEmail(session.accessToken, email.trim())
+        if (password.isNotBlank()) auth.updatePassword(session.accessToken, password)
+        Triple(name.trim(), email.trim(), password.isNotBlank())
+    }) { state, result ->
+        val (updatedName, updatedEmail, passwordChanged) = result
+        state.copy(profileName = updatedName, authSession = state.authSession?.copy(displayName = updatedName), messages = state.messages + (if (updatedEmail != state.authSession?.email) ("profile" to "Profile saved. Confirm the email change using the link we sent.") else ("profile" to if (passwordChanged) "Profile and password saved." else "Profile saved.")))
+    }
+
+    fun updateFamily(name: String, currency: String) = task("family_settings", {
+        farm.updateFamilyName(token(), familyId(), name, currency)
+    }) { state, _ -> state.copy(family = state.family?.copy(name = name.trim(), currency = currency), messages = state.messages + ("family_settings" to "Family name and currency saved.")) }
 
     private fun token(): String = _state.value.authSession?.accessToken ?: error("Sign in again to continue.")
     private fun familyId(): String = _state.value.family?.id ?: error("Choose a family to continue.")

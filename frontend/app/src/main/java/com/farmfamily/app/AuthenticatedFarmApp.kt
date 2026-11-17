@@ -187,7 +187,8 @@ internal fun FarmWorkspaceScreen(viewModel: FarmFamilyViewModel, state: FarmUiSt
                     loading = "home_report" in state.loading,
                     error = state.errors["home_report"],
                     onRetry = { viewModel.loadYearReport() },
-                    onSelectYear = viewModel::loadYearReport
+                    onSelectYear = viewModel::loadYearReport,
+                    onNavigate = ::navigate
                 )
                 FarmTab.AI -> FarmAiScreen(
                     modifier = contentModifier,

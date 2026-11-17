@@ -75,7 +75,7 @@ internal fun FarmNestedRoute(
         "settings" -> FarmSettingsScreen(modifier, onSignOut)
         "family" -> FarmFamilyInfoScreen(modifier, state, viewModel)
         "signout" -> { LaunchedEffect(Unit) { onSignOut() }; FarmEmptyState("Signing out", "Your family records remain saved.", null, {}) }
-        "report" -> FarmReportModuleScreen(bits.getOrNull(1).orEmpty(), modifier, state, viewModel, onNavigate)
+        "report" -> FarmReportModuleScreen(bits.getOrNull(1).orEmpty().let { if (it == "harvest") "harvest_records" else it }, modifier, state, viewModel, onNavigate)
         else -> FarmEmptyState("This screen is unavailable", "Go back and choose another section.", "Back", onBack)
     }
 }
@@ -436,11 +436,14 @@ private fun FarmBackupScreen(modifier: Modifier, state: FarmUiState, vm: FarmFam
 @Composable
 private fun FarmProfileScreen(modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel) {
     var name by rememberSaveable { mutableStateOf(state.authSession?.displayName.orEmpty()) }
+    var email by rememberSaveable { mutableStateOf(state.authSession?.email.orEmpty()) }
+    var password by rememberSaveable { mutableStateOf("") }
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Text("Profile", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
-        item { Text(state.authSession?.email.orEmpty(), color = FarmMuted) }
         item { OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Your name") }, singleLine = true) }
-        item { Button(onClick = { vm.updateProfile(name) }, modifier = Modifier.fillMaxWidth()) { Text("Save profile") } }
+        item { OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email address") }, singleLine = true) }
+        item { OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("New password (leave blank to keep current)") }, singleLine = true, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()) }
+        item { Button(onClick = { vm.updateAccount(name, email, password); password = "" }, modifier = Modifier.fillMaxWidth(), enabled = "profile" !in state.loading) { Text("Save account") } }
         state.messages["profile"]?.let { item { FarmNotice(it) } }; state.errors["profile"]?.let { item { FarmNotice(it, true) } }
     }
 }
@@ -448,11 +451,13 @@ private fun FarmProfileScreen(modifier: Modifier, state: FarmUiState, vm: FarmFa
 @Composable
 private fun FarmFamilySettingsScreen(modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel) {
     var name by rememberSaveable(state.family?.id) { mutableStateOf(state.family?.name.orEmpty()) }
+    var currency by rememberSaveable(state.family?.id) { mutableStateOf(state.family?.currency.orEmpty()) }
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Text("Family settings", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
         item { OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Family name") }, singleLine = true, enabled = state.family?.role == "OWNER") }
-        if (state.family?.role == "OWNER") item { Button(onClick = { vm.updateFamily(name) }, modifier = Modifier.fillMaxWidth()) { Text("Save family") } }
-        item { Text("Currency: ${state.family?.currency.orEmpty()}", color = FarmMuted) }
+        item { OutlinedTextField(currency, { currency = it.uppercase().filter(Char::isLetter).take(3) }, Modifier.fillMaxWidth(), label = { Text("Currency (NPR, INR, or USD)") }, singleLine = true, enabled = state.family?.role == "OWNER") }
+        if (state.family?.role == "OWNER") item { Button(onClick = { vm.updateFamily(name, currency) }, modifier = Modifier.fillMaxWidth()) { Text("Save family") } }
+        else item { Text("Family currency: $currency", color = FarmMuted) }
         state.messages["family_settings"]?.let { item { FarmNotice(it) } }; state.errors["family_settings"]?.let { item { FarmNotice(it, true) } }
     }
 }
@@ -484,7 +489,8 @@ private fun FarmReportModuleScreen(table: String, modifier: Modifier, state: Far
     var from by rememberSaveable(table) { mutableStateOf("") }
     var to by rememberSaveable(table) { mutableStateOf("") }
     var pickerFor by rememberSaveable(table) { mutableStateOf<String?>(null) }
-    val pickerState = rememberDatePickerState()
+    val currentYear = LocalDate.now().year
+    val pickerState = rememberDatePickerState(yearRange = 2000..currentYear)
     LaunchedEffect(table, from, to, state.records[table]) { vm.loadReportRecords(table, from.takeIf(String::isNotBlank), to.takeIf(String::isNotBlank)) }
     val rows = state.reportRecords[table].orEmpty()
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
@@ -517,7 +523,9 @@ private fun FarmReportModuleScreen(table: String, modifier: Modifier, state: Far
         confirmButton = { TextButton(onClick = {
             pickerState.selectedDateMillis?.let { millis ->
                 val selected = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate().toString()
-                if (pickerFor == "from") from = selected else to = selected
+                if (LocalDate.parse(selected) <= LocalDate.now()) {
+                    if (pickerFor == "from") from = selected else to = selected
+                }
             }
             pickerFor = null
         }) { Text("Set date") } },

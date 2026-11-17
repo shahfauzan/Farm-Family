@@ -110,6 +110,16 @@ class SupabaseAuthRepository(context: Context) {
         )
     }
 
+    fun updateProfile(accessToken: String, fullName: String) {
+        require(fullName.isNotBlank()) { "Enter your name." }
+        request("PUT", "user", body = JSONObject().put("data", JSONObject().put("full_name", fullName.trim())), accessToken = accessToken)
+    }
+
+    fun updateEmail(accessToken: String, email: String) {
+        require(email.contains('@') && email.substringAfter('@').contains('.')) { "Enter a valid email address." }
+        request("PUT", "user", body = JSONObject().put("email", email.trim()), accessToken = accessToken)
+    }
+
     fun restoreSession(): AuthSession? {
         val saved = sessionStore.load() ?: return null
         if (saved.expiresAt <= System.currentTimeMillis() / 1000 + 60) {

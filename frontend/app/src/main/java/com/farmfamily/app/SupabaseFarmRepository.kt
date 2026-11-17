@@ -317,10 +317,11 @@ class SupabaseFarmRepository(context: android.content.Context) {
             JSONObject().put("display_name", displayName.trim()), "return=minimal")
     }
 
-    fun updateFamilyName(accessToken: String, familyId: String, name: String) {
+    fun updateFamilyName(accessToken: String, familyId: String, name: String, currency: String) {
         require(name.trim().isNotBlank() && name.trim().length <= 160) { "Enter a family name up to 160 characters." }
+        require(currency in setOf("NPR", "INR", "USD")) { "Choose NPR, INR, or USD as the family currency." }
         request("rest/v1/families?id=eq.$familyId", "PATCH", accessToken,
-            JSONObject().put("name", name.trim()), "return=minimal")
+            JSONObject().put("name", name.trim()).put("currency", currency), "return=minimal")
     }
 
     fun loadWeather(accessToken: String, familyId: String, latitude: Double, longitude: Double): JSONObject {
