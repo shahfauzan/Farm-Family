@@ -176,6 +176,10 @@ jobs:
         working-directory: backend
         run: npx --no-install supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
 
+      - name: Apply Supabase Auth deep-link configuration
+        working-directory: backend
+        run: npx --no-install supabase config push --remote "$SUPABASE_PROJECT_REF" --yes
+
       - name: Verify database connectivity and migration plan
         working-directory: backend
         run: npx --no-install supabase db push --dry-run --linked
@@ -192,12 +196,10 @@ jobs:
         working-directory: backend
         shell: bash
         run: |
-          for name in OPENAI_API_KEY OPENWEATHER_API_KEY; do
-            if [[ -z "${!name}" ]]; then
-              echo "::error::Add $name as a secret in the production GitHub environment."
-              exit 1
-            fi
-          done
+          if [[ -z "$OPENAI_API_KEY" || -z "$OPENWEATHER_API_KEY" ]]; then
+            echo "::warning::Set OPENAI_API_KEY and OPENWEATHER_API_KEY in the production environment to enable AI and weather."
+            exit 0
+          fi
           npx --no-install supabase secrets set \
             "OPENAI_API_KEY=$OPENAI_API_KEY" \
             "OPENWEATHER_API_KEY=$OPENWEATHER_API_KEY" \

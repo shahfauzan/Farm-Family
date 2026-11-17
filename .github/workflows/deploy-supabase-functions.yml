@@ -38,7 +38,7 @@ jobs:
       - name: Validate production secrets
         shell: bash
         run: |
-          for name in SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_REF OPENAI_API_KEY OPENWEATHER_API_KEY; do
+          for name in SUPABASE_ACCESS_TOKEN SUPABASE_PROJECT_REF; do
             if [[ -z "${!name}" ]]; then
               echo "::error::Add $name to the production GitHub environment (project ref as a variable; other values as secrets)."
               exit 1
@@ -58,6 +58,10 @@ jobs:
         working-directory: backend
         shell: bash
         run: |
+          if [[ -z "$OPENAI_API_KEY" || -z "$OPENWEATHER_API_KEY" ]]; then
+            echo "::warning::Set OPENAI_API_KEY and OPENWEATHER_API_KEY in the production environment to enable AI and weather."
+            exit 0
+          fi
           npx --no-install supabase secrets set \
             "OPENAI_API_KEY=$OPENAI_API_KEY" \
             "OPENWEATHER_API_KEY=$OPENWEATHER_API_KEY" \
