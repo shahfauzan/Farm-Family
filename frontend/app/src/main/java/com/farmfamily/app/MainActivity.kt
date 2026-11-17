@@ -15,7 +15,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         authCallback.value = intent?.data
         setContent {
-            FarmDesignSystem {
+            FarmDesignSystem(darkMode = viewModel.darkMode.value) {
                 FarmFamilyApp(
                     viewModel = viewModel,
                     initialCallback = authCallback.value,

@@ -77,6 +77,7 @@ import java.util.Locale
 internal fun FarmWorkspaceScaffold(
     family: FamilyMembership,
     selectedTab: String,
+    awadhi: Boolean = false,
     nestedTitle: String?,
     onSelectTab: (FarmTab) -> Unit,
     onBack: () -> Unit,
@@ -93,7 +94,7 @@ internal fun FarmWorkspaceScaffold(
                 title = {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Text(if (nested) family.name.uppercase() else "FARM FAMILY", style = MaterialTheme.typography.labelMedium, color = FarmGreen, letterSpacing = 1.sp)
-                        Text(nestedTitle ?: family.name, style = MaterialTheme.typography.titleLarge, color = FarmInk, maxLines = 1)
+                        Text(if (nestedTitle != null) farmLabel(nestedTitle, awadhi) else family.name, style = MaterialTheme.typography.titleLarge, color = FarmInk, maxLines = 1)
                     }
                 },
                 navigationIcon = {
@@ -125,10 +126,10 @@ internal fun FarmWorkspaceScaffold(
                                     FarmTab.AI -> Icons.Default.AutoAwesome
                                     FarmTab.MORE -> Icons.Default.Menu
                                 },
-                                contentDescription = tab.title
+                                contentDescription = farmLabel(tab.title, awadhi)
                             )
                         },
-                        label = { Text(tab.title, maxLines = 1) }
+                        label = { Text(farmLabel(tab.title, awadhi), maxLines = 1) }
                     )
                 }
             }
@@ -498,12 +499,13 @@ internal fun FarmMoreScreen(
     modifier: Modifier,
     family: FamilyMembership,
     session: AuthSession?,
+    awadhi: Boolean,
     onNavigate: (String) -> Unit
 ) {
     LazyColumn(modifier, contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 90.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            Text("More", style = MaterialTheme.typography.headlineMedium, color = FarmForest)
-            Text("Family workspace and account", style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
+            Text(farmLabel("More", awadhi), style = MaterialTheme.typography.headlineMedium, color = FarmForest)
+            Text(farmLabel("Family workspace and account", awadhi), style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
         }
         item {
             Surface(shape = RoundedCornerShape(12.dp), color = FarmLeaf, modifier = Modifier.fillMaxWidth().clickable { onNavigate("family") }) {
@@ -514,18 +516,19 @@ internal fun FarmMoreScreen(
                 }
             }
         }
-        item { FarmUtilityRow("Family members", "Roles and access", Icons.Default.Home) { onNavigate("members") } }
-        item { FarmUtilityRow("Family settings", "Name and workspace details", Icons.Default.Home) { onNavigate("family_settings") } }
-        item { FarmUtilityRow("Invitations", "Invite a family member", Icons.Default.Add) { onNavigate("invitations") } }
+        item { FarmUtilityRow(farmLabel("Family members", awadhi), farmLabel("Roles and access", awadhi), Icons.Default.Home) { onNavigate("members") } }
+        item { FarmUtilityRow(farmLabel("Family settings", awadhi), farmLabel("Name and workspace details", awadhi), Icons.Default.Home) { onNavigate("family_settings") } }
+        item { FarmUtilityRow(farmLabel("Invitations", awadhi), farmLabel("Invite a family member", awadhi), Icons.Default.Add) { onNavigate("invitations") } }
         item { FarmUtilityRow("Notifications", "Activity and sync updates", Icons.Default.NotificationsNone) { onNavigate("notifications") } }
-        item { FarmUtilityRow("Backup & restore", "Export or restore family data", Icons.Default.FolderOpen) { onNavigate("backup") } }
-        item { FarmUtilityRow("Profile", "Name and account details", Icons.Default.Home) { onNavigate("profile") } }
-        item { FarmUtilityRow("Settings", "Sync, help, and about", Icons.Default.Menu) { onNavigate("settings") } }
+        item { FarmUtilityRow(farmLabel("Recycle bin", awadhi), "Restore deleted records", Icons.Default.FolderOpen) { onNavigate("recycle_bin") } }
+        item { FarmUtilityRow(farmLabel("Backup & restore", awadhi), farmLabel("Export or restore family data", awadhi), Icons.Default.FolderOpen) { onNavigate("backup") } }
+        item { FarmUtilityRow(farmLabel("Profile", awadhi), "Name and account details", Icons.Default.Home) { onNavigate("profile") } }
+        item { FarmUtilityRow(farmLabel("Settings", awadhi), farmLabel("Sync, help, and about", awadhi), Icons.Default.Menu) { onNavigate("settings") } }
         item {
             Text("Family permissions are enforced by Supabase as well as by the controls shown in the app.", style = MaterialTheme.typography.bodySmall, color = FarmMuted, modifier = Modifier.padding(top = 8.dp))
         }
         item {
-            TextButton(onClick = { onNavigate("signout") }) { Text("Sign out") }
+            TextButton(onClick = { onNavigate("signout") }) { Text(farmLabel("Sign out", awadhi)) }
         }
     }
 }

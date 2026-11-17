@@ -140,6 +140,7 @@ internal fun FarmWorkspaceScreen(viewModel: FarmFamilyViewModel, state: FarmUiSt
     FarmWorkspaceScaffold(
         family = family,
         selectedTab = selectedTab,
+        awadhi = viewModel.awadhiLanguage.value,
         nestedTitle = routeStack.lastOrNull()?.let(::farmRouteTitle),
         onSelectTab = { tab -> selectedTab = tab.name; routeStack.clear() },
         onBack = ::back,
@@ -201,6 +202,7 @@ internal fun FarmWorkspaceScreen(viewModel: FarmFamilyViewModel, state: FarmUiSt
                     modifier = contentModifier,
                     family = family,
                     session = state.authSession,
+                    awadhi = viewModel.awadhiLanguage.value,
                     onNavigate = ::navigate
                 )
             }
@@ -234,6 +236,7 @@ internal fun farmRouteTitle(route: String): String {
         "notifications" -> "Notifications"
         "search" -> "Search records"
         "backup" -> "Backup & restore"
+        "recycle_bin" -> "Recycle bin"
         "profile" -> "Profile"
         "settings" -> "Settings"
         "family_settings" -> "Family settings"

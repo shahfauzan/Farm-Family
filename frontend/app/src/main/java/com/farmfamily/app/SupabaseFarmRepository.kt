@@ -188,6 +188,18 @@ class SupabaseFarmRepository(context: android.content.Context) {
         )
     }
 
+    fun loadDeletedRecords(accessToken: String, familyId: String): List<JSONObject> = RECORD_TABLES.flatMap { table ->
+        val rows = JSONArray(request("rest/v1/$table?select=*&family_id=eq.$familyId&deleted_at=not.is.null&order=deleted_at.desc&limit=100", "GET", accessToken))
+        (0 until rows.length()).map { rows.getJSONObject(it).put("table_name", table) }
+    }.sortedByDescending { it.optString("deleted_at") }.take(300)
+
+    fun restoreRecord(accessToken: String, familyId: String, table: String, row: JSONObject) {
+        require(table in RECORD_TABLES) { "This record type is not supported." }
+        request("rest/v1/rpc/restore_record", "POST", accessToken,
+            JSONObject().put("p_table", "public.$table").put("p_id", row.getString("id"))
+                .put("p_family", familyId).put("p_expected", row.optLong("record_version", 1)))
+    }
+
     fun searchRecords(accessToken: String, familyId: String, query: String): List<JSONObject> {
         val rows = JSONArray(request(
             "rest/v1/rpc/family_search", "POST", accessToken,

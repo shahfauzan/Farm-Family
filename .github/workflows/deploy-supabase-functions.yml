@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "backend/supabase/functions/**"
+      - "backend/supabase/config.toml"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/deploy-supabase-functions.yml"
@@ -47,6 +48,9 @@ jobs:
             echo "::error::SUPABASE_PROJECT_REF does not match the production project."
             exit 1
           fi
+      - name: Apply Supabase Auth deep-link configuration
+        working-directory: backend
+        run: npx --no-install supabase config push --remote "$SUPABASE_PROJECT_REF" --yes
       - name: Deploy edge functions
         working-directory: backend
         run: npx --no-install supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"

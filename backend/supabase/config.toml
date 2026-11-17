@@ -2,7 +2,7 @@ project_id = "farm-family"
 
 [auth]
 enabled = true
-site_url = "http://localhost:3000"
+site_url = "farmfamily://auth-callback"
 additional_redirect_urls = ["farmfamily://auth-callback"]
 enable_signup = true
 

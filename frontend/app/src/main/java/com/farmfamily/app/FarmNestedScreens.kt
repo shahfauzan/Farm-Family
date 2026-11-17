@@ -1,6 +1,7 @@
 package com.farmfamily.app
 
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -42,7 +43,9 @@ import androidx.compose.runtime.setValue
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.size
 import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalDate
@@ -70,9 +73,10 @@ internal fun FarmNestedRoute(
         "invitations" -> FarmInvitationsScreen(modifier, state, viewModel)
         "notifications" -> FarmNotificationsScreen(modifier, state, viewModel)
         "backup" -> FarmBackupScreen(modifier, state, viewModel)
+        "recycle_bin" -> FarmRecycleBinScreen(modifier, state, viewModel)
         "profile" -> FarmProfileScreen(modifier, state, viewModel)
         "family_settings" -> FarmFamilySettingsScreen(modifier, state, viewModel)
-        "settings" -> FarmSettingsScreen(modifier, onSignOut)
+        "settings" -> FarmSettingsScreen(modifier, viewModel, onSignOut)
         "family" -> FarmFamilyInfoScreen(modifier, state, viewModel)
         "signout" -> { LaunchedEffect(Unit) { onSignOut() }; FarmEmptyState("Signing out", "Your family records remain saved.", null, {}) }
         "report" -> FarmReportModuleScreen(bits.getOrNull(1).orEmpty().let { if (it == "harvest") "harvest_records" else it }, modifier, state, viewModel, onNavigate)
@@ -438,8 +442,34 @@ private fun FarmProfileScreen(modifier: Modifier, state: FarmUiState, vm: FarmFa
     var name by rememberSaveable { mutableStateOf(state.authSession?.displayName.orEmpty()) }
     var email by rememberSaveable { mutableStateOf(state.authSession?.email.orEmpty()) }
     var password by rememberSaveable { mutableStateOf("") }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let { selected ->
+            runCatching { context.contentResolver.takePersistableUriPermission(selected, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            vm.setAvatarUri(selected.toString())
+        }
+    }
+    val avatarUri = vm.avatarUri.value?.let(android.net.Uri::parse)
+    val avatarBitmap by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null, avatarUri) {
+        value = avatarUri?.let { imageUri -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { context.contentResolver.openInputStream(imageUri)?.use { android.graphics.BitmapFactory.decodeStream(it) } }.getOrNull()
+        } }
+    }
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Text("Profile", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item {
+            Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                if (avatarBitmap != null) androidx.compose.foundation.Image(
+                    bitmap = avatarBitmap!!.asImageBitmap(), contentDescription = "Profile picture",
+                    modifier = Modifier.size(112.dp).clip(androidx.compose.foundation.shape.CircleShape)
+                ) else androidx.compose.foundation.layout.Box(
+                    modifier = Modifier.size(112.dp).clip(androidx.compose.foundation.shape.CircleShape).background(FarmLeaf),
+                    contentAlignment = androidx.compose.ui.Alignment.Center
+                ) { Text(name.firstOrNull()?.uppercase() ?: "F", style = MaterialTheme.typography.headlineLarge, color = FarmForest) }
+                TextButton(onClick = { avatarPicker.launch(arrayOf("image/*")) }) { Text(if (avatarUri == null) "Choose profile picture" else "Change profile picture") }
+                if (avatarUri != null) TextButton(onClick = { vm.setAvatarUri(null) }) { Text("Remove picture") }
+            }
+        }
         item { OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Your name") }, singleLine = true) }
         item { OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text("Email address") }, singleLine = true) }
         item { OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text("New password (leave blank to keep current)") }, singleLine = true, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()) }
@@ -474,12 +504,38 @@ private fun FarmFamilyInfoScreen(modifier: Modifier, state: FarmUiState, vm: Far
 }
 
 @Composable
-private fun FarmSettingsScreen(modifier: Modifier, signOut: () -> Unit) {
+private fun FarmSettingsScreen(modifier: Modifier, vm: FarmFamilyViewModel, signOut: () -> Unit) {
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { Text("Settings", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
         item { FarmInlineNote("Records sync securely with the family workspace. Drafts and connectivity status are shown where available.") }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Dark theme", color = FarmInk); androidx.compose.material3.Switch(checked = vm.darkMode.value, onCheckedChange = vm::setDarkMode) } }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Awadhi language (अवधी)", color = FarmInk); androidx.compose.material3.Switch(checked = vm.awadhiLanguage.value, onCheckedChange = vm::setAwadhiLanguage) } }
         item { Text("FARM FAMILY · Version 1.0", color = FarmMuted) }
-        item { TextButton(onClick = signOut) { Text("Sign out") } }
+        item { TextButton(onClick = signOut) { Text(farmLabel("Sign out", vm.awadhiLanguage.value)) } }
+    }
+}
+
+@Composable
+private fun FarmRecycleBinScreen(modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel) {
+    LaunchedEffect(state.family?.id) { vm.loadRecycleBin() }
+    LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item { Text(farmLabel("Recycle bin", vm.awadhiLanguage.value), style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item { Text("Deleted family records stay here until restored. Only family members with delete access can restore them.", color = FarmMuted) }
+        if ("recycle_bin" in state.loading) item { FarmLoadingRow("Loading deleted records…") }
+        state.errors["recycle_bin"]?.let { item { FarmInlineErrorCard(it) { vm.loadRecycleBin() } } }
+        state.messages["recycle_bin"]?.let { item { FarmNotice(it) } }
+        val rows = state.recycleRecords.orEmpty()
+        if (rows.isEmpty() && "recycle_bin" !in state.loading) item { FarmEmptyState("Recycle bin is empty", "Deleted records from your family will appear here.", null, {}) }
+        items(rows, key = { it.optString("table_name") + ":" + it.optString("id") }) { row ->
+            val table = row.optString("table_name")
+            val module = FarmModules.byTable(table)
+            val label = row.optString(module?.primaryLabel.orEmpty()).ifBlank { module?.title ?: table }
+            Column(Modifier.fillMaxWidth().background(FarmWhite).padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text(label, style = MaterialTheme.typography.titleMedium, color = FarmInk)
+                Text("${module?.title ?: table} · ${row.optString("deleted_at")}", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+                if (state.family?.canDelete == true) TextButton(onClick = { vm.restoreDeletedRecord(row) }, enabled = "recycle_bin" !in state.loading) { Text("Restore") }
+            }
+        }
     }
 }
 

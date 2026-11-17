@@ -39,6 +39,7 @@ internal data class FarmUiState(
     val createdInvitation: CreatedInvitation? = null,
     val notifications: List<JSONObject>? = null,
     val backupRecords: List<BackupRecord>? = null,
+    val recycleRecords: List<JSONObject>? = null,
     val restorePreview: JSONObject? = null,
     val restoreResult: JSONObject? = null,
     val conflict: JSONObject? = null,
@@ -50,7 +51,15 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
     private val auth = SupabaseAuthRepository(application)
     private val farm = SupabaseFarmRepository(application)
     private val _state = androidx.compose.runtime.mutableStateOf(FarmUiState())
+    private val preferences = application.getSharedPreferences("farm_family_preferences", Context.MODE_PRIVATE)
+    val darkMode = androidx.compose.runtime.mutableStateOf(preferences.getBoolean("dark_mode", false))
+    val awadhiLanguage = androidx.compose.runtime.mutableStateOf(preferences.getBoolean("awadhi_language", false))
+    val avatarUri = androidx.compose.runtime.mutableStateOf(preferences.getString("avatar_uri", null))
     val state: androidx.compose.runtime.State<FarmUiState> = _state
+
+    fun setDarkMode(enabled: Boolean) { darkMode.value = enabled; preferences.edit().putBoolean("dark_mode", enabled).apply() }
+    fun setAwadhiLanguage(enabled: Boolean) { awadhiLanguage.value = enabled; preferences.edit().putBoolean("awadhi_language", enabled).apply() }
+    fun setAvatarUri(uri: String?) { avatarUri.value = uri; preferences.edit().putString("avatar_uri", uri).apply() }
     private var started = false
     private var pendingSyncJob: Job? = null
     private val connectivityManager = application.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -443,6 +452,12 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
     }
 
     fun loadBackups() = task("backups", { farm.loadBackups(token(), familyId()) }) { state, result -> state.copy(backupRecords = result) }
+
+    fun loadRecycleBin() = task("recycle_bin", { farm.loadDeletedRecords(token(), familyId()) }) { state, rows -> state.copy(recycleRecords = rows) }
+    fun restoreDeletedRecord(row: JSONObject) = task("recycle_bin", {
+        farm.restoreRecord(token(), familyId(), row.optString("table_name"), row)
+        row.optString("table_name")
+    }) { state, table -> state.copy(recycleRecords = state.recycleRecords.orEmpty().filterNot { it.optString("id") == row.optString("id") && it.optString("table_name") == table }, messages = state.messages + ("recycle_bin" to "Record restored.")) }
 
     fun exportBackup(format: String) = task("backups", { farm.exportBackup(token(), familyId(), format) }) { state, result ->
         state.copy(backupRecords = null, messages = state.messages + ("backups" to result))
