@@ -62,14 +62,14 @@ internal object FarmModules {
             FarmInput("seed_name", "Seed name", required = true, maxLength = 160),
             FarmInput("crop_season_id", "Crop season", FarmInputType.RELATION, relationTable = "crop_seasons", relationLabel = "season_name", maxLength = 500),
             FarmInput("quantity", "Quantity", FarmInputType.NUMBER, numberMin = 0.0), FarmInput("unit", "Unit"),
-            FarmInput("amount", "Amount", FarmInputType.NUMBER, numberMin = 0.0), FarmInput("currency", "Currency", choices = listOf("NPR", "INR", "USD")),
+            FarmInput("amount", "Amount", FarmInputType.NUMBER, numberMin = 0.0), FarmInput("currency", "Currency", choices = listOf("NPR")),
             FarmInput("purchased_on", "Purchase date", FarmInputType.DATE), FarmInput("notes", "Notes", FarmInputType.MULTILINE)
         )),
         FarmModule("fertilizer_records", "Fertilizer", "Products and applications", "fertilizer", "applied_on", "product_name", "quantity", listOf(
             FarmInput("product_name", "Product name", required = true, maxLength = 160),
             FarmInput("crop_season_id", "Crop season", FarmInputType.RELATION, relationTable = "crop_seasons", relationLabel = "season_name"),
             FarmInput("quantity", "Quantity", FarmInputType.NUMBER, numberMin = 0.0), FarmInput("unit", "Unit"),
-            FarmInput("amount", "Amount", FarmInputType.NUMBER, numberMin = 0.0), FarmInput("currency", "Currency", choices = listOf("NPR", "INR", "USD")),
+            FarmInput("amount", "Amount", FarmInputType.NUMBER, numberMin = 0.0), FarmInput("currency", "Currency", choices = listOf("NPR")),
             FarmInput("applied_on", "Applied on", FarmInputType.DATE), FarmInput("notes", "Notes", FarmInputType.MULTILINE)
         )),
         FarmModule("labor_records", "Labor", "Work and labor costs", "labor", "work_date", "description", "amount", listOf(
@@ -78,14 +78,14 @@ internal object FarmModules {
             FarmInput("worker_count", "Number of workers", FarmInputType.NUMBER, numberMin = 0.0),
             FarmInput("hours", "Hours", FarmInputType.NUMBER, numberMin = 0.0),
             FarmInput("description", "Work description", maxLength = 300), FarmInput("amount", "Amount", FarmInputType.NUMBER, numberMin = 0.0),
-            FarmInput("currency", "Currency", choices = listOf("NPR", "INR", "USD"))
+            FarmInput("currency", "Currency", choices = listOf("NPR"))
         )),
         FarmModule("machinery_usage", "Machinery", "Equipment and service costs", "machinery", "usage_date", "service_name", "amount", listOf(
             FarmInput("service_name", "Service", required = true, maxLength = 160), FarmInput("provider", "Provider"),
             FarmInput("crop_season_id", "Crop season", FarmInputType.RELATION, relationTable = "crop_seasons", relationLabel = "season_name"),
             FarmInput("usage_date", "Date", FarmInputType.DATE), FarmInput("quantity", "Quantity", FarmInputType.NUMBER, numberMin = 0.0),
             FarmInput("unit", "Unit"), FarmInput("amount", "Amount", FarmInputType.NUMBER, numberMin = 0.0),
-            FarmInput("currency", "Currency", choices = listOf("NPR", "INR", "USD")), FarmInput("notes", "Notes", FarmInputType.MULTILINE)
+            FarmInput("currency", "Currency", choices = listOf("NPR")), FarmInput("notes", "Notes", FarmInputType.MULTILINE)
         )),
         FarmModule("expenses", "Expenses", "Track farm costs", "expense", "expense_date", "description", "amount", listOf(
             FarmInput("description", "What was the expense?", required = true, maxLength = 200),
@@ -93,7 +93,7 @@ internal object FarmModules {
             FarmInput("crop_season_id", "Crop season", FarmInputType.RELATION, relationTable = "crop_seasons", relationLabel = "season_name"),
             FarmInput("expense_date", "Date", FarmInputType.DATE, required = true), FarmInput("amount", "Amount", FarmInputType.NUMBER, true, numberMin = 0.0),
             FarmInput("quantity", "Quantity", FarmInputType.NUMBER, numberMin = 0.0), FarmInput("unit_price", "Unit price", FarmInputType.NUMBER, numberMin = 0.0),
-            FarmInput("currency", "Currency", FarmInputType.CHOICE, true, listOf("NPR", "INR", "USD")), FarmInput("notes", "Notes", FarmInputType.MULTILINE)
+            FarmInput("currency", "Currency", FarmInputType.CHOICE, true, listOf("NPR")), FarmInput("notes", "Notes", FarmInputType.MULTILINE)
         )),
         FarmModule("harvest_records", "Harvests", "Harvest quantities and grades", "harvest", "harvest_date", "quantity", "unit", listOf(
             FarmInput("crop_season_id", "Crop season", FarmInputType.RELATION, true, relationTable = "crop_seasons", relationLabel = "season_name"),
@@ -107,13 +107,13 @@ internal object FarmModules {
             FarmInput("sold_on", "Sale date", FarmInputType.DATE, true), FarmInput("quantity", "Quantity", FarmInputType.NUMBER, true, numberMin = 0.0),
             FarmInput("unit", "Unit", required = true), FarmInput("unit_price", "Price per unit", FarmInputType.NUMBER, true, numberMin = 0.0),
             FarmInput("total_amount", "Total amount", FarmInputType.NUMBER, true, numberMin = 0.0),
-            FarmInput("currency", "Currency", FarmInputType.CHOICE, true, listOf("NPR", "INR", "USD")), FarmInput("buyer", "Buyer"), FarmInput("notes", "Notes", FarmInputType.MULTILINE)
+            FarmInput("currency", "Currency", FarmInputType.CHOICE, true, listOf("NPR")), FarmInput("buyer", "Buyer"), FarmInput("notes", "Notes", FarmInputType.MULTILINE)
         )),
         FarmModule("historical_prices", "Historical prices", "Local crop market prices", "price", "observed_on", "crop_name", "price", listOf(
             FarmInput("crop_name", "Crop", required = true, maxLength = 120), FarmInput("crop_id", "Crop record", FarmInputType.RELATION, relationTable = "crops", relationLabel = "name"),
             FarmInput("observed_on", "Observed on", FarmInputType.DATE, true), FarmInput("market", "Market"),
             FarmInput("quantity_unit", "Price unit", required = true), FarmInput("price", "Price", FarmInputType.NUMBER, true, numberMin = 0.0),
-            FarmInput("currency", "Currency", FarmInputType.CHOICE, true, listOf("NPR", "INR", "USD")), FarmInput("source", "Source")
+            FarmInput("currency", "Currency", FarmInputType.CHOICE, true, listOf("NPR")), FarmInput("source", "Source")
         )),
         FarmModule("expense_categories", "Expense categories", "Organize your farm spending", "category", "name", "name", "is_custom", listOf(
             FarmInput("name", "Category name", required = true, maxLength = 100), FarmInput("is_custom", "Custom category", FarmInputType.BOOLEAN)

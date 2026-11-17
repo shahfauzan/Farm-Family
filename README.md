@@ -10,7 +10,7 @@ Farm Family is a family-oriented farm management application. This repository br
 - Supabase backend foundation for family accounts, farm records, invitations, synchronization, reports, backups/imports, AI, and weather.
 - PostgreSQL migrations with row-level security and database-side operations.
 
-The Android frontend implements Supabase email/password authentication, family create/join, family membership lookup, and server-backed field listing/creation. The Figma blueprint is the visual source for the implemented auth, family setup, home, and field flows. Room/offline sync and the remaining product modules are still in progress. Legacy mock screens are not the authenticated production path.
+The Android frontend includes Supabase email/password authentication, family onboarding and member management, farm records, reports, AI/weather entry points, backup/import/export, profile, settings, and recycle-bin flows. The app uses the existing Farm Family visual identity. Field caching supports foreground retry/reconciliation; broad offline synchronization is not implemented. A successful debug build and backend contract tests verify packaging and schema contracts, but do not replace live-account testing of email confirmation, invitations, provider APIs, backup restore, or all device flows.
 
 ## Architecture
 
@@ -79,6 +79,6 @@ The root [build workflow](.github/workflows/build.yml) runs Edge Function valida
 
 Push a semantic version tag such as `v1.2.3`, or manually run the [release workflow](.github/workflows/release.yml) with a semantic version. The workflow validates first, builds an Android release APK, checks database connectivity with a migration dry run, applies pending migrations, deploys Edge Functions, and then creates a GitHub Release.
 
-The release workflow verifies the signed APK and attaches it to the GitHub Release. APK signing does not imply Play Store readiness. The release workflow has not yet been verified against the hosted Supabase project.
+The release workflow verifies the signed APK and attaches it to the GitHub Release. APK signing does not imply Play Store readiness. Configure the production environment's Supabase deployment secrets and Android signing secrets before running a production release.
 
 Do not declare production readiness until the production deployment and real Supabase runtime checks have succeeded.

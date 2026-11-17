@@ -19,12 +19,23 @@ try {
     create function public.digest(text,text) returns bytea language sql immutable as $$ select public.digest(convert_to($1,'UTF8'),$2) $$;
     create function public.gen_random_bytes(integer) returns bytea language sql volatile as $$ select decode(substr(repeat(md5(random()::text),ceil($1/16.0)::integer),1,$1*2),'hex') $$;
   `);
-  for (const name of ['202611140001_farm_family.sql','202611140002_secure_operations.sql','202611140003_weather_quota.sql','202611140004_unit_safe_harvest_reports.sql','202611140005_finance_currency_validation.sql']) {
+  for (const name of ['202611140001_farm_family.sql','202611140002_secure_operations.sql','202611140004_unit_safe_harvest_reports.sql','202611140005_finance_currency_validation.sql','20261117032903_family_member_roster.sql','20261117072159_harden_security_definer_privileges.sql','20261117073707_restore_weather_quota_schema.sql']) {
     const source = await Deno.readTextFile(`supabase/migrations/${name}`);
     const sql = source.replace(/^create extension if not exists pgcrypto;\s*/m, '-- pgcrypto stubbed for embedded migration syntax validation.\n');
     await db.exec(sql);
     console.log(`PASS migration DDL: ${name}`);
   }
+  const rpcAcl = (await q(`
+    select
+      has_function_privilege('anon','public.create_family(text,character)','EXECUTE') as anon_create,
+      has_function_privilege('authenticated','public.create_family(text,character)','EXECUTE') as user_create,
+      has_function_privilege('authenticated','public.is_family_member(uuid)','EXECUTE') as policy_helper,
+      has_function_privilege('authenticated','public.audit_row()','EXECUTE') as trigger_only
+  `)).rows[0];
+  if (rpcAcl.anon_create || !rpcAcl.user_create || !rpcAcl.policy_helper || rpcAcl.trigger_only) {
+    throw new Error(`Unexpected SECURITY DEFINER function grants: ${JSON.stringify(rpcAcl)}`);
+  }
+  console.log('PASS SECURITY DEFINER RPC grants');
   const a='11111111-1111-4111-8111-111111111111';
   const b='22222222-2222-4222-8222-222222222222';
   await db.exec(`insert into auth.users(id) values ('${a}'),('${b}'); grant usage on schema auth to authenticated; grant execute on function auth.uid() to authenticated; grant usage on schema storage to authenticated; grant all on all tables in schema public to authenticated; grant usage,select on all sequences in schema public to authenticated; grant select on storage.objects to authenticated;`);

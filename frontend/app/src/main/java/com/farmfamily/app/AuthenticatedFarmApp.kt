@@ -7,9 +7,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -24,6 +24,17 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 internal fun FarmFamilyApp(
+    viewModel: FarmFamilyViewModel,
+    initialCallback: Uri?,
+    onCallbackHandled: () -> Unit
+) {
+    CompositionLocalProvider(LocalFarmHindi provides viewModel.hindiLanguage.value) {
+        FarmFamilyAppContent(viewModel, initialCallback, onCallbackHandled)
+    }
+}
+
+@Composable
+private fun FarmFamilyAppContent(
     viewModel: FarmFamilyViewModel,
     initialCallback: Uri?,
     onCallbackHandled: () -> Unit
@@ -97,9 +108,9 @@ internal fun FarmSplashScreen(message: String = "Growing together") {
             modifier = Modifier.size(88.dp)
         )
         androidx.compose.foundation.layout.Spacer(Modifier.size(24.dp))
-        Text("FARM FAMILY", style = MaterialTheme.typography.headlineMedium, color = FarmForest)
+        FarmText("FARM FAMILY", style = MaterialTheme.typography.headlineMedium, color = FarmForest)
         androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
-        Text(message, style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
+        FarmText(message, style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
         androidx.compose.foundation.layout.Spacer(Modifier.size(24.dp))
         CircularProgressIndicator(color = FarmGreen, strokeWidth = 2.dp)
     }
@@ -112,11 +123,11 @@ internal fun FarmErrorScreen(title: String, message: String, onRetry: () -> Unit
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center
     ) {
-        Text(title, style = MaterialTheme.typography.headlineSmall, color = FarmForest)
+        FarmText(title, style = MaterialTheme.typography.headlineSmall, color = FarmForest)
         androidx.compose.foundation.layout.Spacer(Modifier.size(8.dp))
-        Text(message, style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
+        FarmText(message, style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
         androidx.compose.foundation.layout.Spacer(Modifier.size(16.dp))
-        androidx.compose.material3.Button(onClick = onRetry) { Text("Try again") }
+        androidx.compose.material3.Button(onClick = onRetry) { FarmText("Try again") }
     }
 }
 
@@ -140,7 +151,7 @@ internal fun FarmWorkspaceScreen(viewModel: FarmFamilyViewModel, state: FarmUiSt
     FarmWorkspaceScaffold(
         family = family,
         selectedTab = selectedTab,
-        awadhi = viewModel.awadhiLanguage.value,
+        hindi = viewModel.hindiLanguage.value,
         nestedTitle = routeStack.lastOrNull()?.let(::farmRouteTitle),
         onSelectTab = { tab -> selectedTab = tab.name; routeStack.clear() },
         onBack = ::back,
@@ -202,7 +213,7 @@ internal fun FarmWorkspaceScreen(viewModel: FarmFamilyViewModel, state: FarmUiSt
                     modifier = contentModifier,
                     family = family,
                     session = state.authSession,
-                    awadhi = viewModel.awadhiLanguage.value,
+                    hindi = viewModel.hindiLanguage.value,
                     onNavigate = ::navigate
                 )
             }
@@ -212,10 +223,10 @@ internal fun FarmWorkspaceScreen(viewModel: FarmFamilyViewModel, state: FarmUiSt
     if (signOutConfirm) {
         AlertDialog(
             onDismissRequest = { signOutConfirm = false },
-            title = { Text("Sign out of FARM FAMILY?") },
-            text = { Text("Your saved family records will stay in your account.") },
-            confirmButton = { TextButton(onClick = { signOutConfirm = false; viewModel.signOut() }) { Text("Sign out") } },
-            dismissButton = { TextButton(onClick = { signOutConfirm = false }) { Text("Cancel") } }
+            title = { FarmText("Sign out of FARM FAMILY?") },
+            text = { FarmText("Your saved family records will stay in your account.") },
+            confirmButton = { TextButton(onClick = { signOutConfirm = false; viewModel.signOut() }) { FarmText("Sign out") } },
+            dismissButton = { TextButton(onClick = { signOutConfirm = false }) { FarmText("Cancel") } }
         )
     }
 }

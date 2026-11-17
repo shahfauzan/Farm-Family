@@ -331,7 +331,7 @@ class SupabaseFarmRepository(context: android.content.Context) {
 
     fun updateFamilyName(accessToken: String, familyId: String, name: String, currency: String) {
         require(name.trim().isNotBlank() && name.trim().length <= 160) { "Enter a family name up to 160 characters." }
-        require(currency in setOf("NPR", "INR", "USD")) { "Choose NPR, INR, or USD as the family currency." }
+        require(currency == "NPR") { "Family currency is set to NPR." }
         request("rest/v1/families?id=eq.$familyId", "PATCH", accessToken,
             JSONObject().put("name", name.trim()).put("currency", currency), "return=minimal")
     }

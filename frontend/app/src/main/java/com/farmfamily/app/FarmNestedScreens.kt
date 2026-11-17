@@ -27,7 +27,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -91,8 +90,8 @@ private fun FarmModuleScreen(table: String, modifier: Modifier, state: FarmUiSta
     if (module == null) return FarmEmptyState("Unknown record type", "This section is not available.", null, {})
     val rows = state.records[table]
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item { Text(module.description, style = MaterialTheme.typography.bodyMedium, color = FarmMuted) }
-        if (state.family?.canAdd == true) item { Button(onClick = { navigate("form:$table:new") }, modifier = Modifier.fillMaxWidth()) { Text("Add ${module.title.removeSuffix("s")}") } }
+        item { FarmText(module.description, style = MaterialTheme.typography.bodyMedium, color = FarmMuted) }
+        if (state.family?.canAdd == true) item { Button(onClick = { navigate("form:$table:new") }, modifier = Modifier.fillMaxWidth()) { FarmText("Add ${module.title.removeSuffix("s")}") } }
         state.errors[table]?.let { message -> item { FarmInlineErrorCard(message) { vm.loadRecords(table) } } }
         if (table in state.loading && rows == null) item { FarmLoadingRow("Loading ${module.title.lowercase()}…") }
         if (rows.isNullOrEmpty() && table !in state.loading) item { FarmEmptyState("No ${module.title.lowercase()} yet", "Add the first record for this family.", if (state.family?.canAdd == true) "Add record" else null) { navigate("form:$table:new") } }
@@ -115,22 +114,22 @@ private fun FarmRecordForm(table: String, mode: String, recordId: String?, modif
     var validation by rememberSaveable(table, recordId) { mutableStateOf<String?>(null) }
     val family = state.family
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text(if (mode == "new") "Add ${module.title.removeSuffix("s").lowercase()}" else "Edit ${module.title.removeSuffix("s").lowercase()}", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item { FarmText(if (mode == "new") "Add ${module.title.removeSuffix("s").lowercase()}" else "Edit ${module.title.removeSuffix("s").lowercase()}", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
         module.inputs.forEach { input ->
             item(key = input.key) {
                 when {
-                    input.key in setOf("costs_complete", "revenue_complete") && family?.role != "OWNER" -> Text("${input.label}: ${if (values[input.key] == "true") "Yes" else "Not confirmed"} · Only an owner can confirm completeness.", color = FarmMuted, style = MaterialTheme.typography.bodySmall)
+                    input.key in setOf("costs_complete", "revenue_complete") && family?.role != "OWNER" -> FarmText("${input.label}: ${if (values[input.key] == "true") "Yes" else "Not confirmed"} · Only an owner can confirm completeness.", color = FarmMuted, style = MaterialTheme.typography.bodySmall)
                     input.type == FarmInputType.BOOLEAN -> Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Checkbox(checked = values[input.key] == "true", onCheckedChange = { values[input.key] = it.toString() })
-                        Text(input.label, modifier = Modifier.padding(top = 12.dp), color = FarmInk)
+                        FarmText(input.label, modifier = Modifier.padding(top = 12.dp), color = FarmInk)
                     }
                     input.type == FarmInputType.CHOICE -> {
                         var expanded by remember(input.key) { mutableStateOf(false) }
                         Column {
-                            Text(input.label, style = MaterialTheme.typography.labelMedium, color = FarmMuted)
-                            TextButton(onClick = { expanded = true }) { Text(values[input.key]?.takeIf { it.isNotBlank() } ?: "Choose ${input.label.lowercase()}") }
+                            FarmText(input.label, style = MaterialTheme.typography.labelMedium, color = FarmMuted)
+                            TextButton(onClick = { expanded = true }) { FarmText(values[input.key]?.takeIf { it.isNotBlank() } ?: "Choose ${input.label.lowercase()}") }
                             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                                input.choices.forEach { choice -> DropdownMenuItem(text = { Text(choice) }, onClick = { values[input.key] = choice; expanded = false }) }
+                                input.choices.forEach { choice -> DropdownMenuItem(text = { FarmText(choice) }, onClick = { values[input.key] = choice; expanded = false }) }
                             }
                         }
                     }
@@ -139,17 +138,17 @@ private fun FarmRecordForm(table: String, mode: String, recordId: String?, modif
                         var expanded by remember(input.key) { mutableStateOf(false) }
                         LaunchedEffect(input.relationTable) { input.relationTable?.let(vm::loadRecords) }
                         Column {
-                            Text(input.label, style = MaterialTheme.typography.labelMedium, color = FarmMuted)
+                            FarmText(input.label, style = MaterialTheme.typography.labelMedium, color = FarmMuted)
                             TextButton(onClick = { expanded = true }) {
                                 val selected = options.firstOrNull { it.optString("id") == values[input.key] }
-                                Text(selected?.optString(input.relationLabel).orEmpty().ifBlank { "Choose ${input.label.lowercase()}" })
+                                FarmText(selected?.optString(input.relationLabel).orEmpty().ifBlank { "Choose ${input.label.lowercase()}" })
                             }
                             DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                                options.forEach { option -> DropdownMenuItem(text = { Text(option.optString(input.relationLabel)) }, onClick = { values[input.key] = option.optString("id"); expanded = false }) }
+                                options.forEach { option -> DropdownMenuItem(text = { FarmText(option.optString(input.relationLabel)) }, onClick = { values[input.key] = option.optString("id"); expanded = false }) }
                             }
                             input.relationTable?.takeIf { options.isEmpty() && it in setOf("crops", "fields") }?.let { relatedTable ->
-                                Text("No $relatedTable have been added yet.", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
-                                TextButton(onClick = { navigate("form:$relatedTable:new") }) { Text("Add ${relatedTable.removeSuffix("s")}") }
+                                FarmText("No $relatedTable have been added yet.", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+                                TextButton(onClick = { navigate("form:$relatedTable:new") }) { FarmText("Add ${relatedTable.removeSuffix("s")}") }
                             }
                         }
                     }
@@ -160,23 +159,23 @@ private fun FarmRecordForm(table: String, mode: String, recordId: String?, modif
                         OutlinedTextField(
                             value = values[input.key]?.let { raw -> runCatching { LocalDate.parse(raw).format(DateTimeFormatter.ofPattern("d MMM yyyy", java.util.Locale.getDefault())) }.getOrDefault(raw) }.orEmpty(),
                             onValueChange = {}, modifier = Modifier.fillMaxWidth(),
-                            label = { Text(input.label + if (input.required) " *" else "") }, readOnly = true,
-                            trailingIcon = { TextButton(onClick = { showPicker = true }) { Text("Choose") } }
+                            label = { FarmText(input.label + if (input.required) " *" else "") }, readOnly = true,
+                            trailingIcon = { TextButton(onClick = { showPicker = true }) { FarmText("Choose") } }
                         )
                         if (showPicker) DatePickerDialog(
                             onDismissRequest = { showPicker = false },
                             confirmButton = { TextButton(onClick = {
                                 pickerState.selectedDateMillis?.let { millis -> values[input.key] = Instant.ofEpochMilli(millis).atZone(ZoneOffset.UTC).toLocalDate().toString() }
                                 showPicker = false
-                            }) { Text("Set date") } },
-                            dismissButton = { TextButton(onClick = { showPicker = false }) { Text("Cancel") } }
+                            }) { FarmText("Set date") } },
+                            dismissButton = { TextButton(onClick = { showPicker = false }) { FarmText("Cancel") } }
                         ) { DatePicker(state = pickerState) }
                     }
                     else -> OutlinedTextField(
                         value = values[input.key].orEmpty(), onValueChange = { entered ->
                             if (input.type != FarmInputType.NUMBER || entered.isEmpty() || entered.matches(Regex("-?\\d*(\\.\\d*)?"))) values[input.key] = entered
                             validation = null
-                        }, modifier = Modifier.fillMaxWidth(), label = { Text(input.label + if (input.required) " *" else "") },
+                        }, modifier = Modifier.fillMaxWidth(), label = { FarmText(input.label + if (input.required) " *" else "") },
                         minLines = if (input.type == FarmInputType.MULTILINE) 3 else 1, maxLines = if (input.type == FarmInputType.MULTILINE) 5 else 1,
                         singleLine = input.type != FarmInputType.MULTILINE
                     )
@@ -220,20 +219,20 @@ private fun FarmRecordForm(table: String, mode: String, recordId: String?, modif
                     if (mode == "new") vm.createRecord(table, json)
                     else if (existing != null) vm.updateRecord(table, existing.optString("id"), existing.optLong("record_version"), json)
                 }
-            }, enabled = if (mode == "new") family?.canAdd == true else family?.canEdit == true, modifier = Modifier.fillMaxWidth().height(50.dp)) { Text("Save record") }
+            }, enabled = if (mode == "new") family?.canAdd == true else family?.canEdit == true, modifier = Modifier.fillMaxWidth().height(50.dp)) { FarmText("Save record") }
         }
         state.errors[table]?.let { item { FarmNotice(it, true) } }
         state.conflict?.takeIf { it.has("server_record") }?.let { conflict -> item {
             Column(Modifier.fillMaxWidth().background(FarmWarning).padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("This record changed on another device", style = MaterialTheme.typography.titleMedium, color = FarmForest)
-                Text("You opened version ${conflict.optLong("expected_version")}; the latest is version ${conflict.optLong("actual_version")}.", color = FarmInk)
-                Text("Latest saved values: ${conflict.optJSONObject("server_record")?.toString().orEmpty()}", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
-                Text("Review the latest version before continuing. Your unsaved form will stay open until you discard it.", style = MaterialTheme.typography.bodySmall, color = FarmInk)
-                TextButton(onClick = { vm.clearConflict(); vm.clearRecordMessage(table); back() }) { Text("Discard draft and return") }
+                FarmText("This record changed on another device", style = MaterialTheme.typography.titleMedium, color = FarmForest)
+                FarmText("You opened version ${conflict.optLong("expected_version")}; the latest is version ${conflict.optLong("actual_version")}.", color = FarmInk)
+                FarmText("Latest saved values: ${conflict.optJSONObject("server_record")?.toString().orEmpty()}", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+                FarmText("Review the latest version before continuing. Your unsaved form will stay open until you discard it.", style = MaterialTheme.typography.bodySmall, color = FarmInk)
+                TextButton(onClick = { vm.clearConflict(); vm.clearRecordMessage(table); back() }) { FarmText("Discard draft and return") }
             }
         } }
         if ("${table}_save" in state.loading) item { FarmLoadingRow("Saving securely…") }
-        item { Text("Your family’s access rules are checked again when this record is saved.", style = MaterialTheme.typography.bodySmall, color = FarmMuted) }
+        item { FarmText("Your family’s access rules are checked again when this record is saved.", style = MaterialTheme.typography.bodySmall, color = FarmMuted) }
     }
 }
 
@@ -247,20 +246,20 @@ private fun FarmRecordDetail(table: String, id: String, modifier: Modifier, stat
     val row = state.records[table].orEmpty().firstOrNull { it.optString("id") == id }
     if (row == null) return FarmEmptyState("Record not found", "It may have been removed or you may no longer have access.", "Back", back)
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text(row.optString(module.primaryLabel).ifBlank { module.title }, style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item { FarmText(row.optString(module.primaryLabel).ifBlank { module.title }, style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
         module.inputs.forEach { field ->
             val value = if (field.key == "location_label") row.optJSONObject("location")?.optString("label") else row.opt(field.key)?.toString()?.takeUnless { it == "null" }
             if (!value.isNullOrBlank()) item {
                 Column(Modifier.fillMaxWidth().background(FarmWhite).padding(12.dp)) {
-                    Text(field.label, style = MaterialTheme.typography.labelMedium, color = FarmMuted)
-                    Text(value, style = MaterialTheme.typography.bodyLarge, color = FarmInk)
+                    FarmText(field.label, style = MaterialTheme.typography.labelMedium, color = FarmMuted)
+                    FarmText(value, style = MaterialTheme.typography.bodyLarge, color = FarmInk)
                 }
             }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (state.family?.canEdit == true) Button(onClick = { navigate("form:$table:edit:$id") }) { Text("Edit") }
-                if (state.family?.canDelete == true) TextButton(onClick = { confirmDelete = true }) { Text("Move to recycle history") }
+                if (state.family?.canEdit == true) Button(onClick = { navigate("form:$table:edit:$id") }) { FarmText("Edit") }
+                if (state.family?.canDelete == true) TextButton(onClick = { confirmDelete = true }) { FarmText("Move to recycle history") }
             }
         }
         state.errors[table]?.let { item { FarmNotice(it, true) } }
@@ -268,13 +267,13 @@ private fun FarmRecordDetail(table: String, id: String, modifier: Modifier, stat
     }
     if (confirmDelete) AlertDialog(
         onDismissRequest = { if ("${table}_delete" !in state.loading) confirmDelete = false },
-        title = { Text("Move this record to recycle history?") },
-        text = { Text("Your family can review or restore it later if recovery is enabled.") },
+        title = { FarmText("Move this record to recycle history?") },
+        text = { FarmText("Your family can review or restore it later if recovery is enabled.") },
         confirmButton = { TextButton(enabled = "${table}_delete" !in state.loading, onClick = {
             confirmDelete = false
             vm.deleteRecord(table, id, row.optLong("record_version"))
-        }) { Text("Move record") } },
-        dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel") } }
+        }) { FarmText("Move record") } },
+        dismissButton = { TextButton(onClick = { confirmDelete = false }) { FarmText("Cancel") } }
     )
 }
 
@@ -288,11 +287,11 @@ private fun FarmSearchScreen(modifier: Modifier, state: FarmUiState, vm: FarmFam
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item { OutlinedTextField(
             value = query, onValueChange = { query = it; submitted = false }, modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
-            label = { Text("Search farm records") }, singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            label = { FarmText("Search farm records") }, singleLine = true, keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = { submitted = query.trim().length >= 2; if (submitted) vm.search(query.trim()); keyboard?.hide() }),
-            trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = ""; submitted = false }) { Text("Clear") } }
+            trailingIcon = { if (query.isNotEmpty()) TextButton(onClick = { query = ""; submitted = false }) { FarmText("Clear") } }
         ) }
-        item { Button(onClick = { if (query.trim().length >= 2) { submitted = true; vm.search(query.trim()); keyboard?.hide() } }, modifier = Modifier.fillMaxWidth()) { Text("Search") } }
+        item { Button(onClick = { if (query.trim().length >= 2) { submitted = true; vm.search(query.trim()); keyboard?.hide() } }, modifier = Modifier.fillMaxWidth()) { FarmText("Search") } }
         if ("search" in state.loading) item { FarmLoadingRow("Searching your family records…") }
         state.errors["search"]?.let { item { FarmNotice(it, true) } }
         state.searchResults?.let { results ->
@@ -309,7 +308,7 @@ private fun FarmSearchScreen(modifier: Modifier, state: FarmUiState, vm: FarmFam
 @Composable
 private fun FarmQuickAddScreen(modifier: Modifier, navigate: (String) -> Unit) {
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp)) {
-        item { Text("What would you like to add?", style = MaterialTheme.typography.titleLarge, color = FarmForest) }
+        item { FarmText("What would you like to add?", style = MaterialTheme.typography.titleLarge, color = FarmForest) }
         items(FarmModules.all) { module -> FarmUtilityRow(module.title, module.description, moduleIcon(module.iconKey)) { navigate("form:${module.table}:new") } }
     }
 }
@@ -319,25 +318,25 @@ private fun FarmMembersScreen(modifier: Modifier, state: FarmUiState, vm: FarmFa
     LaunchedEffect(state.family?.id, state.family?.role) { vm.loadMembers(includeRemoved = state.family?.role == "OWNER") }
     var editing by remember { mutableStateOf<FamilyMemberRecord?>(null) }
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("Family members", style = MaterialTheme.typography.headlineSmall, color = FarmForest); Text("Choose who can view, add, change, or remove shared records.", color = FarmMuted) }
+        item { FarmText("Family members", style = MaterialTheme.typography.headlineSmall, color = FarmForest); FarmText("Choose who can view, add, change, or remove shared records.", color = FarmMuted) }
         if ("members" in state.loading) item { FarmLoadingRow("Loading family access…") }
         state.errors["members"]?.let { item { FarmNotice(it, true) } }
         items(state.members.orEmpty(), key = { it.userId }) { member ->
             Column(Modifier.fillMaxWidth().background(FarmWhite).padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(member.name, style = MaterialTheme.typography.titleMedium, color = FarmInk)
-                Text("${member.role.lowercase().replaceFirstChar { it.uppercase() }} · ${if (member.removed) "Access removed" else "${if (member.canView) "Can view" else "No view"}, ${if (member.canAdd) "add" else "no add"}, ${if (member.canEdit) "edit" else "no edit"}, ${if (member.canDelete) "delete" else "no delete"}"}", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
-                if (state.family?.role == "OWNER") TextButton(onClick = { editing = member }) { Text(if (member.removed) "Restore access" else "Manage access") }
+                FarmText(member.name, style = MaterialTheme.typography.titleMedium, color = FarmInk)
+                FarmText("${member.role.lowercase().replaceFirstChar { it.uppercase() }} · ${if (member.removed) "Access removed" else "${if (member.canView) "Can view" else "No view"}, ${if (member.canAdd) "add" else "no add"}, ${if (member.canEdit) "edit" else "no edit"}, ${if (member.canDelete) "delete" else "no delete"}"}", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+                if (state.family?.role == "OWNER") TextButton(onClick = { editing = member }) { FarmText(if (member.removed) "Restore access" else "Manage access") }
             }
         }
     }
     editing?.let { member ->
         var role by remember(member.userId) { mutableStateOf(member.role) }
         var canAdd by remember(member.userId) { mutableStateOf(member.canAdd) }; var canEdit by remember(member.userId) { mutableStateOf(member.canEdit) }; var canDelete by remember(member.userId) { mutableStateOf(member.canDelete) }
-        AlertDialog(onDismissRequest = { editing = null }, title = { Text("${if (member.removed) "Restore" else "Permissions for"} ${member.name}") },
+        AlertDialog(onDismissRequest = { editing = null }, title = { FarmText("${if (member.removed) "Restore" else "Permissions for"} ${member.name}") },
             text = { Column {
-                listOf("VIEWER", "EDITOR").forEach { candidate -> Row { androidx.compose.material3.RadioButton(role == candidate, { role = candidate }); Text(candidate, Modifier.padding(top = 12.dp)) } }
-                listOf("Add records" to canAdd, "Edit records" to canEdit, "Delete records" to canDelete).forEach { (label, checked) -> Row { Checkbox(checked, { when (label) { "Add records" -> canAdd = it; "Edit records" -> canEdit = it; else -> canDelete = it } }); Text(label, Modifier.padding(top = 12.dp)) } }
-            } }, confirmButton = { TextButton(onClick = { if (member.removed) vm.removeMember(member.userId, true) else if (state.family?.canEdit == true) vm.changeMemberRole(member, role, canAdd, canEdit, canDelete) else vm.removeMember(member.userId); editing = null }) { Text(if (member.removed) "Restore" else "Save") } }, dismissButton = { TextButton(onClick = { editing = null }) { Text("Cancel") } })
+                listOf("VIEWER", "EDITOR").forEach { candidate -> Row { androidx.compose.material3.RadioButton(role == candidate, { role = candidate }); FarmText(candidate, Modifier.padding(top = 12.dp)) } }
+                listOf("Add records" to canAdd, "Edit records" to canEdit, "Delete records" to canDelete).forEach { (label, checked) -> Row { Checkbox(checked, { when (label) { "Add records" -> canAdd = it; "Edit records" -> canEdit = it; else -> canDelete = it } }); FarmText(label, Modifier.padding(top = 12.dp)) } }
+            } }, confirmButton = { TextButton(onClick = { if (member.removed) vm.removeMember(member.userId, true) else if (state.family?.canEdit == true) vm.changeMemberRole(member, role, canAdd, canEdit, canDelete) else vm.removeMember(member.userId); editing = null }) { FarmText(if (member.removed) "Restore" else "Save") } }, dismissButton = { TextButton(onClick = { editing = null }) { FarmText("Cancel") } })
     }
 }
 
@@ -349,33 +348,33 @@ private fun FarmInvitationsScreen(modifier: Modifier, state: FarmUiState, vm: Fa
     var role by rememberSaveable { mutableStateOf("EDITOR") }
     var days by rememberSaveable { mutableStateOf("7") }
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("Invitations", style = MaterialTheme.typography.headlineSmall, color = FarmForest); Text("Invite someone to join this family workspace.", color = FarmMuted) }
-        item { TextButton(onClick = vm::loadInvitations) { Text("Refresh invitations") } }
+        item { FarmText("Invitations", style = MaterialTheme.typography.headlineSmall, color = FarmForest); FarmText("Invite someone to join this family workspace.", color = FarmMuted) }
+        item { TextButton(onClick = vm::loadInvitations) { FarmText("Refresh invitations") } }
         if (state.family?.role == "OWNER") item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("EDITOR", "VIEWER").forEach { TextButton(onClick = { role = it }) { Text(if (role == it) "✓ $it" else it) } } }
-            OutlinedTextField(days, { if (it.all(Char::isDigit)) days = it }, Modifier.fillMaxWidth(), label = { Text("Expires in days (1–30)") }, singleLine = true)
-            Button(onClick = { val d = days.toIntOrNull(); if (d != null && d in 1..30) vm.createInvitation(role, d) }, modifier = Modifier.fillMaxWidth()) { Text("Create invitation") }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("EDITOR", "VIEWER").forEach { TextButton(onClick = { role = it }) { FarmText(if (role == it) "✓ $it" else it) } } }
+            OutlinedTextField(days, { if (it.all(Char::isDigit)) days = it }, Modifier.fillMaxWidth(), label = { FarmText("Expires in days (1–30)") }, singleLine = true)
+            Button(onClick = { val d = days.toIntOrNull(); if (d != null && d in 1..30) vm.createInvitation(role, d) }, modifier = Modifier.fillMaxWidth()) { FarmText("Create invitation") }
         }
         state.createdInvitation?.let { invitation -> item {
             Column(Modifier.fillMaxWidth().background(FarmLeaf).padding(12.dp)) {
-                Text("Invitation code: ${invitation.token}", color = FarmForest)
-                Text("Expires ${invitation.expiresAt}", color = FarmMuted)
+                FarmText("Invitation code: ${invitation.token}", color = FarmForest)
+                FarmText("Expires ${invitation.expiresAt}", color = FarmMuted)
                 Row {
-                    TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(invitation.token)) }) { Text("Copy code") }
+                    TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(invitation.token)) }) { FarmText("Copy code") }
                     TextButton(onClick = {
                         val share = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
                             .putExtra(android.content.Intent.EXTRA_TEXT, "Join my FARM FAMILY workspace with this invitation code: ${invitation.token}")
                         context.startActivity(android.content.Intent.createChooser(share, "Share family invitation"))
-                    }) { Text("Share") }
+                    }) { FarmText("Share") }
                 }
             }
         } }
         state.errors["invitations"]?.let { item { FarmNotice(it, true) } }
         items(state.invitations.orEmpty(), key = { it.id }) { invite ->
             Column(Modifier.fillMaxWidth().background(FarmWhite).padding(12.dp)) {
-                Text("${invite.role} · ${invite.status}", color = FarmForest)
-                Text("Expires ${invite.expiresAt}", color = FarmMuted)
-                if (state.family?.role == "OWNER" && invite.status == "PENDING") TextButton(onClick = { vm.revokeInvitation(invite.id) }) { Text("Revoke invitation") }
+                FarmText("${invite.role} · ${invite.status}", color = FarmForest)
+                FarmText("Expires ${invite.expiresAt}", color = FarmMuted)
+                if (state.family?.role == "OWNER" && invite.status == "PENDING") TextButton(onClick = { vm.revokeInvitation(invite.id) }) { FarmText("Revoke invitation") }
             }
         }
     }
@@ -385,15 +384,15 @@ private fun FarmInvitationsScreen(modifier: Modifier, state: FarmUiState, vm: Fa
 private fun FarmNotificationsScreen(modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel) {
     LaunchedEffect(Unit) { vm.loadNotifications() }
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        item { Text("Notifications", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item { FarmText("Notifications", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
         state.errors["notifications"]?.let { item { FarmNotice(it, true) } }
         if ("notifications" in state.loading) item { FarmLoadingRow("Loading notifications…") }
         if (state.notifications?.isEmpty() == true) item { FarmEmptyState("You’re all caught up", "Family activity notifications will appear here.", null, {}) }
         items(state.notifications.orEmpty(), key = { it.optString("id") }) { notification ->
             Column(Modifier.fillMaxWidth().background(FarmWhite).clickable { vm.markNotificationRead(notification.optString("id")) }.padding(13.dp)) {
-                Text(notification.optString("content_key").replace('_', ' ').replaceFirstChar { it.uppercase() }, color = FarmInk)
-                Text(notification.optJSONObject("content_args")?.toString().orEmpty(), color = FarmMuted)
-                Text(notification.optString("created_at"), style = MaterialTheme.typography.labelSmall, color = FarmMuted)
+                FarmText(notification.optString("content_key").replace('_', ' ').replaceFirstChar { it.uppercase() }, color = FarmInk)
+                FarmText(notification.optJSONObject("content_args")?.toString().orEmpty(), color = FarmMuted)
+                FarmText(notification.optString("created_at"), style = MaterialTheme.typography.labelSmall, color = FarmMuted)
             }
         }
     }
@@ -406,30 +405,30 @@ private fun FarmBackupScreen(modifier: Modifier, state: FarmUiState, vm: FarmFam
     val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> uri?.let(vm::importBackup) }
     var restoreTarget by remember { mutableStateOf<String?>(null) }
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("Backup & restore", style = MaterialTheme.typography.headlineSmall, color = FarmForest); Text("Download a copy or restore a family backup after reviewing its contents.", color = FarmMuted) }
-        item { TextButton(onClick = vm::loadBackups) { Text("Refresh backups") } }
-        item { Button(onClick = { vm.exportBackup("ZIP") }, modifier = Modifier.fillMaxWidth()) { Text("Create restorable ZIP backup") } }
-        item { Button(onClick = { vm.exportBackup("CSV") }, modifier = Modifier.fillMaxWidth()) { Text("Create CSV export") } }
-        item { TextButton(onClick = { importPicker.launch(arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed")) }, enabled = state.family?.role == "OWNER") { Text("Import a ZIP backup") } }
+        item { FarmText("Backup & restore", style = MaterialTheme.typography.headlineSmall, color = FarmForest); FarmText("Download a copy or restore a family backup after reviewing its contents.", color = FarmMuted) }
+        item { TextButton(onClick = vm::loadBackups) { FarmText("Refresh backups") } }
+        item { Button(onClick = { vm.exportBackup("ZIP") }, modifier = Modifier.fillMaxWidth()) { FarmText("Create restorable ZIP backup") } }
+        item { Button(onClick = { vm.exportBackup("CSV") }, modifier = Modifier.fillMaxWidth()) { FarmText("Create CSV export") } }
+        item { TextButton(onClick = { importPicker.launch(arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed")) }, enabled = state.family?.role == "OWNER") { FarmText("Import a ZIP backup") } }
         state.messages["backups"]?.let { item { FarmNotice(it) } }; state.errors["backups"]?.let { item { FarmNotice(it, true) } }
         item { FarmSectionTitle("AVAILABLE BACKUPS") }
         items(state.backupRecords.orEmpty(), key = { it.id }) { backup ->
             Column(Modifier.fillMaxWidth().background(FarmWhite).padding(12.dp)) {
-                Text("${backup.format} backup", color = FarmForest); Text(backup.createdAt, color = FarmMuted)
+                FarmText("${backup.format} backup", color = FarmForest); FarmText(backup.createdAt, color = FarmMuted)
                 Row {
                 TextButton(onClick = { vm.prepareBackupDownload(backup.id) { url ->
                     val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
                     runCatching { context.startActivity(intent) }
-                } }) { Text("Download") }
-                    TextButton(onClick = { vm.previewRestore(backup.id); restoreTarget = backup.id }) { Text("Review restore") }
+                } }) { FarmText("Download") }
+                    TextButton(onClick = { vm.previewRestore(backup.id); restoreTarget = backup.id }) { FarmText("Review restore") }
                 }
             }
         }
         state.restorePreview?.let { preview -> item {
             Column(Modifier.fillMaxWidth().background(FarmLeaf).padding(14.dp)) {
-                Text("Restore preview", style = MaterialTheme.typography.titleMedium, color = FarmForest)
-                Text(preview.toString(), color = FarmInk)
-                Button(onClick = { vm.confirmRestore(); restoreTarget = null }) { Text("Confirm restore") }
+                FarmText("Restore preview", style = MaterialTheme.typography.titleMedium, color = FarmForest)
+                FarmText(preview.toString(), color = FarmInk)
+                Button(onClick = { vm.confirmRestore(); restoreTarget = null }) { FarmText("Confirm restore") }
             }
         } }
         state.restoreResult?.let { item { FarmNotice("Restore completed. Review your records for any reported conflicts.") } }
@@ -453,25 +452,25 @@ private fun FarmProfileScreen(modifier: Modifier, state: FarmUiState, vm: FarmFa
         } }
     }
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text(farmLabel("Profile", vm.awadhiLanguage.value), style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item { FarmText(farmLabel("Profile", vm.hindiLanguage.value), style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
         item {
             Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 if (avatarBitmap != null) androidx.compose.foundation.Image(
-                    bitmap = avatarBitmap!!.asImageBitmap(), contentDescription = farmLabel("Profile picture", vm.awadhiLanguage.value),
+                    bitmap = avatarBitmap!!.asImageBitmap(), contentDescription = farmLabel("Profile picture", vm.hindiLanguage.value),
                     modifier = Modifier.size(112.dp).clip(androidx.compose.foundation.shape.CircleShape)
                 ) else androidx.compose.foundation.layout.Box(
                     modifier = Modifier.size(112.dp).clip(androidx.compose.foundation.shape.CircleShape).background(FarmLeaf),
                     contentAlignment = androidx.compose.ui.Alignment.Center
-                ) { Text(name.firstOrNull()?.uppercase() ?: "F", style = MaterialTheme.typography.headlineLarge, color = FarmForest) }
-                TextButton(onClick = { avatarPicker.launch(arrayOf("image/*")) }, enabled = "avatar" !in state.loading) { Text(farmLabel(if (state.authSession?.avatarPath == null) "Choose profile picture" else "Change profile picture", vm.awadhiLanguage.value)) }
-                if (state.authSession?.avatarPath != null) TextButton(onClick = vm::removeAvatar, enabled = "avatar" !in state.loading) { Text(farmLabel("Remove picture", vm.awadhiLanguage.value)) }
+                ) { FarmText(name.firstOrNull()?.uppercase() ?: "F", style = MaterialTheme.typography.headlineLarge, color = FarmForest) }
+                TextButton(onClick = { avatarPicker.launch(arrayOf("image/*")) }, enabled = "avatar" !in state.loading) { FarmText(farmLabel(if (state.authSession?.avatarPath == null) "Choose profile picture" else "Change profile picture", vm.hindiLanguage.value)) }
+                if (state.authSession?.avatarPath != null) TextButton(onClick = vm::removeAvatar, enabled = "avatar" !in state.loading) { FarmText(farmLabel("Remove picture", vm.hindiLanguage.value)) }
                 if ("avatar" in state.loading) FarmLoadingRow("Saving profile picture…")
             }
         }
-        item { OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text(farmLabel("Your name", vm.awadhiLanguage.value)) }, singleLine = true) }
-        item { OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { Text(farmLabel("Email address", vm.awadhiLanguage.value)) }, singleLine = true) }
-        item { OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { Text(farmLabel("New password (leave blank to keep current)", vm.awadhiLanguage.value)) }, singleLine = true, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()) }
-        item { Button(onClick = { vm.updateAccount(name, email, password); password = "" }, modifier = Modifier.fillMaxWidth(), enabled = "profile" !in state.loading) { Text(farmLabel("Save account", vm.awadhiLanguage.value)) } }
+        item { OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { FarmText(farmLabel("Your name", vm.hindiLanguage.value)) }, singleLine = true) }
+        item { OutlinedTextField(email, { email = it }, Modifier.fillMaxWidth(), label = { FarmText(farmLabel("Email address", vm.hindiLanguage.value)) }, singleLine = true) }
+        item { OutlinedTextField(password, { password = it }, Modifier.fillMaxWidth(), label = { FarmText(farmLabel("New password (leave blank to keep current)", vm.hindiLanguage.value)) }, singleLine = true, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation()) }
+        item { Button(onClick = { vm.updateAccount(name, email, password); password = "" }, modifier = Modifier.fillMaxWidth(), enabled = "profile" !in state.loading) { FarmText(farmLabel("Save account", vm.hindiLanguage.value)) } }
         state.messages["profile"]?.let { item { FarmNotice(it) } }; state.errors["profile"]?.let { item { FarmNotice(it, true) } }
         state.errors["avatar"]?.let { item { FarmNotice(it, true) } }
     }
@@ -480,13 +479,13 @@ private fun FarmProfileScreen(modifier: Modifier, state: FarmUiState, vm: FarmFa
 @Composable
 private fun FarmFamilySettingsScreen(modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel) {
     var name by rememberSaveable(state.family?.id) { mutableStateOf(state.family?.name.orEmpty()) }
-    var currency by rememberSaveable(state.family?.id) { mutableStateOf(state.family?.currency.orEmpty()) }
+    val currency = "NPR"
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("Family settings", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
-        item { OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { Text("Family name") }, singleLine = true, enabled = state.family?.role == "OWNER") }
-        item { OutlinedTextField(currency, { currency = it.uppercase().filter(Char::isLetter).take(3) }, Modifier.fillMaxWidth(), label = { Text("Currency (NPR, INR, or USD)") }, singleLine = true, enabled = state.family?.role == "OWNER") }
-        if (state.family?.role == "OWNER") item { Button(onClick = { vm.updateFamily(name, currency) }, modifier = Modifier.fillMaxWidth()) { Text("Save family") } }
-        else item { Text("Family currency: $currency", color = FarmMuted) }
+        item { FarmText("Family settings", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item { OutlinedTextField(name, { name = it }, Modifier.fillMaxWidth(), label = { FarmText("Family name") }, singleLine = true, enabled = state.family?.role == "OWNER") }
+        item { FarmText("Family currency: $currency", color = FarmMuted) }
+        if (state.family?.role == "OWNER") item { Button(onClick = { vm.updateFamily(name, currency) }, modifier = Modifier.fillMaxWidth()) { FarmText("Save family") } }
+        else item { FarmText("Family currency: $currency", color = FarmMuted) }
         state.messages["family_settings"]?.let { item { FarmNotice(it) } }; state.errors["family_settings"]?.let { item { FarmNotice(it, true) } }
     }
 }
@@ -494,23 +493,23 @@ private fun FarmFamilySettingsScreen(modifier: Modifier, state: FarmUiState, vm:
 @Composable
 private fun FarmFamilyInfoScreen(modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel) {
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text(state.family?.name.orEmpty(), style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
-        item { Text("${state.family?.role.orEmpty()} · ${state.family?.currency.orEmpty()}", color = FarmMuted) }
-        item { Text("Shared family data is protected by membership permissions and server side access policies.", color = FarmInk) }
-        item { Button(onClick = vm::loadFamilies) { Text("Switch or refresh family") } }
-        state.memberships.orEmpty().forEach { family -> item { TextButton(onClick = { vm.selectFamily(family) }) { Text(family.name) } } }
+        item { FarmText(state.family?.name.orEmpty(), style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item { FarmText("${state.family?.role.orEmpty()} · ${state.family?.currency.orEmpty()}", color = FarmMuted) }
+        item { FarmText("Shared family data is protected by membership permissions and server side access policies.", color = FarmInk) }
+        item { Button(onClick = vm::loadFamilies) { FarmText("Switch or refresh family") } }
+        state.memberships.orEmpty().forEach { family -> item { TextButton(onClick = { vm.selectFamily(family) }) { FarmText(family.name) } } }
     }
 }
 
 @Composable
 private fun FarmSettingsScreen(modifier: Modifier, vm: FarmFamilyViewModel, signOut: () -> Unit) {
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text(farmLabel("Settings", vm.awadhiLanguage.value), style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
-        item { FarmInlineNote(farmLabel("Records sync securely with the family workspace. Drafts and connectivity status are shown where available.", vm.awadhiLanguage.value)) }
-        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(farmLabel("Dark theme", vm.awadhiLanguage.value), color = FarmInk); androidx.compose.material3.Switch(checked = vm.darkMode.value, onCheckedChange = vm::setDarkMode) } }
-        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(farmLabel("Awadhi language (अवधी)", vm.awadhiLanguage.value), color = FarmInk); androidx.compose.material3.Switch(checked = vm.awadhiLanguage.value, onCheckedChange = vm::setAwadhiLanguage) } }
-        item { Text("FARM FAMILY · Version 1.0", color = FarmMuted) }
-        item { TextButton(onClick = signOut) { Text(farmLabel("Sign out", vm.awadhiLanguage.value)) } }
+        item { FarmText(farmLabel("Settings", vm.hindiLanguage.value), style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item { FarmInlineNote(farmLabel("Records sync securely with the family workspace. Drafts and connectivity status are shown where available.", vm.hindiLanguage.value)) }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { FarmText(farmLabel("Dark theme", vm.hindiLanguage.value), color = FarmInk); androidx.compose.material3.Switch(checked = vm.darkMode.value, onCheckedChange = vm::setDarkMode) } }
+        item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { FarmText(farmLabel("Hindi language", vm.hindiLanguage.value), color = FarmInk); androidx.compose.material3.Switch(checked = vm.hindiLanguage.value, onCheckedChange = vm::setHindiLanguage) } }
+        item { FarmText("FARM FAMILY · Version 1.0", color = FarmMuted) }
+        item { TextButton(onClick = signOut) { FarmText(farmLabel("Sign out", vm.hindiLanguage.value)) } }
     }
 }
 
@@ -518,8 +517,8 @@ private fun FarmSettingsScreen(modifier: Modifier, vm: FarmFamilyViewModel, sign
 private fun FarmRecycleBinScreen(modifier: Modifier, state: FarmUiState, vm: FarmFamilyViewModel) {
     LaunchedEffect(state.family?.id) { vm.loadRecycleBin() }
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text(farmLabel("Recycle bin", vm.awadhiLanguage.value), style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
-        item { Text("Deleted family records stay here until restored. Only family members with delete access can restore them.", color = FarmMuted) }
+        item { FarmText(farmLabel("Recycle bin", vm.hindiLanguage.value), style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item { FarmText("Deleted family records stay here until restored. Only family members with delete access can restore them.", color = FarmMuted) }
         if ("recycle_bin" in state.loading) item { FarmLoadingRow("Loading deleted records…") }
         state.errors["recycle_bin"]?.let { item { FarmInlineErrorCard(it) { vm.loadRecycleBin() } } }
         state.messages["recycle_bin"]?.let { item { FarmNotice(it) } }
@@ -530,9 +529,9 @@ private fun FarmRecycleBinScreen(modifier: Modifier, state: FarmUiState, vm: Far
             val module = FarmModules.byTable(table)
             val label = row.optString(module?.primaryLabel.orEmpty()).ifBlank { module?.title ?: table }
             Column(Modifier.fillMaxWidth().background(FarmWhite).padding(13.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                Text(label, style = MaterialTheme.typography.titleMedium, color = FarmInk)
-                Text("${module?.title ?: table} · ${row.optString("deleted_at")}", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
-                if (state.family?.canDelete == true) TextButton(onClick = { vm.restoreDeletedRecord(row) }, enabled = "recycle_bin" !in state.loading) { Text("Restore") }
+                FarmText(label, style = MaterialTheme.typography.titleMedium, color = FarmInk)
+                FarmText("${module?.title ?: table} · ${row.optString("deleted_at")}", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+                if (state.family?.canDelete == true) TextButton(onClick = { vm.restoreDeletedRecord(row) }, enabled = "recycle_bin" !in state.loading) { FarmText("Restore") }
             }
         }
     }
@@ -549,19 +548,19 @@ private fun FarmReportModuleScreen(table: String, modifier: Modifier, state: Far
     LaunchedEffect(table, from, to, state.records[table]) { vm.loadReportRecords(table, from.takeIf(String::isNotBlank), to.takeIf(String::isNotBlank)) }
     val rows = state.reportRecords[table].orEmpty()
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
-        item { Text("${module.title} analysis", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item { FarmText("${module.title} analysis", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
         if (table in setOf("expenses", "sales", "harvest_records", "historical_prices")) item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { pickerFor = "from" }) { Text(from.ifBlank { "From date" }) }
-                TextButton(onClick = { pickerFor = "to" }) { Text(to.ifBlank { "To date" }) }
-                if (from.isNotBlank() || to.isNotBlank()) TextButton(onClick = { from = ""; to = "" }) { Text("Clear") }
+                TextButton(onClick = { pickerFor = "from" }) { FarmText(from.ifBlank { "From date" }) }
+                TextButton(onClick = { pickerFor = "to" }) { FarmText(to.ifBlank { "To date" }) }
+                if (from.isNotBlank() || to.isNotBlank()) TextButton(onClick = { from = ""; to = "" }) { FarmText("Clear") }
             }
         }
         if (from.isNotBlank() && to.isNotBlank() && from > to) item { FarmNotice("The start date must be on or before the end date.", true) }
         if ("report:$table" in state.loading || "finance:$table" in state.loading) item { FarmLoadingRow("Loading report…") }
         state.errors["report:$table"]?.let { item { FarmInlineErrorCard(it) { vm.loadReportRecords(table, from.takeIf(String::isNotBlank), to.takeIf(String::isNotBlank)) } } }
         state.errors["finance:$table"]?.let { item { FarmInlineErrorCard(it) { vm.loadReportRecords(table, from.takeIf(String::isNotBlank), to.takeIf(String::isNotBlank)) } } }
-        item { Text("${rows.size} records in this report", color = FarmMuted) }
+        item { FarmText("${rows.size} records in this report", color = FarmMuted) }
         state.financeReports[table].orEmpty().forEach { currencyRow ->
             val amount = if (table == "sales") currencyRow.optDouble("revenue") else currencyRow.optDouble("cost")
             item { FarmMetricBlock("${if (table == "sales") "Recorded sales" else "Recorded expenses"} · ${currencyRow.optString("currency")}", "${currencyRow.optString("currency")} ${farmNumber(amount)}", Modifier.fillMaxWidth()) }
@@ -583,7 +582,7 @@ private fun FarmReportModuleScreen(table: String, modifier: Modifier, state: Far
                 }
             }
             pickerFor = null
-        }) { Text("Set date") } },
-        dismissButton = { TextButton(onClick = { pickerFor = null }) { Text("Cancel") } }
+        }) { FarmText("Set date") } },
+        dismissButton = { TextButton(onClick = { pickerFor = null }) { FarmText("Cancel") } }
     ) { DatePicker(state = pickerState) }
 }

@@ -49,7 +49,6 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -77,7 +76,7 @@ import java.util.Locale
 internal fun FarmWorkspaceScaffold(
     family: FamilyMembership,
     selectedTab: String,
-    awadhi: Boolean = false,
+    hindi: Boolean = false,
     nestedTitle: String?,
     onSelectTab: (FarmTab) -> Unit,
     onBack: () -> Unit,
@@ -93,8 +92,8 @@ internal fun FarmWorkspaceScaffold(
             TopAppBar(
                 title = {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(if (nested) family.name.uppercase() else "FARM FAMILY", style = MaterialTheme.typography.labelMedium, color = FarmGreen, letterSpacing = 1.sp)
-                        Text(if (nestedTitle != null) farmLabel(nestedTitle, awadhi) else family.name, style = MaterialTheme.typography.titleLarge, color = FarmInk, maxLines = 1)
+                        FarmText(if (nested) family.name.uppercase() else "FARM FAMILY", style = MaterialTheme.typography.labelMedium, color = FarmGreen, letterSpacing = 1.sp)
+                        FarmText(if (nestedTitle != null) farmLabel(nestedTitle, hindi) else family.name, style = MaterialTheme.typography.titleLarge, color = FarmInk, maxLines = 1)
                     }
                 },
                 navigationIcon = {
@@ -126,10 +125,10 @@ internal fun FarmWorkspaceScaffold(
                                     FarmTab.AI -> Icons.Default.AutoAwesome
                                     FarmTab.MORE -> Icons.Default.Menu
                                 },
-                                contentDescription = farmLabel(tab.title, awadhi)
+                                contentDescription = farmLabel(tab.title, hindi)
                             )
                         },
-                        label = { Text(farmLabel(tab.title, awadhi), maxLines = 1) }
+                        label = { FarmText(farmLabel(tab.title, hindi), maxLines = 1) }
                     )
                 }
             }
@@ -141,7 +140,7 @@ internal fun FarmWorkspaceScaffold(
                     containerColor = FarmForest,
                     contentColor = FarmWhite,
                     icon = { Icon(Icons.Default.Add, contentDescription = null) },
-                    text = { Text("Add record") },
+                    text = { FarmText("Add record") },
                     shape = RoundedCornerShape(14.dp)
                 )
             }
@@ -184,9 +183,9 @@ internal fun FarmHomeScreen(
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(date, style = MaterialTheme.typography.labelMedium, color = FarmMuted)
-                Text(if (firstName.isBlank()) "Welcome to your farm" else "Good day, $firstName", style = MaterialTheme.typography.headlineMedium, color = FarmForest)
-                Text("A shared place for your family’s farm work.", style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
+                FarmText(date, style = MaterialTheme.typography.labelMedium, color = FarmMuted)
+                FarmText(if (firstName.isBlank()) "Welcome to your farm" else "Good day, $firstName", style = MaterialTheme.typography.headlineMedium, color = FarmForest)
+                FarmText("A shared place for your family’s farm work.", style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
             }
         }
         errors["sync"]?.let { message -> item { FarmNotice(message, true) } }
@@ -195,8 +194,8 @@ internal fun FarmHomeScreen(
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(family.name, style = MaterialTheme.typography.headlineSmall, color = FarmWhite, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1)
-                            Text("${family.role.lowercase().replaceFirstChar { it.uppercase() }} · ${family.currency}", style = MaterialTheme.typography.bodySmall, color = FarmLeaf)
+                        FarmText(family.name, style = MaterialTheme.typography.headlineSmall, color = FarmWhite, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1)
+                            FarmText("${family.role.lowercase().replaceFirstChar { it.uppercase() }} · ${family.currency}", style = MaterialTheme.typography.bodySmall, color = FarmLeaf)
                         }
                         Surface(shape = CircleShape, color = FarmWhite.copy(alpha = 0.13f)) {
                             Icon(Icons.Default.Home, contentDescription = "Family farm", tint = FarmWhite, modifier = Modifier.padding(10.dp).size(22.dp))
@@ -209,9 +208,9 @@ internal fun FarmHomeScreen(
                         FarmHeroMetric(pending.toString(), "Need sync", Modifier.weight(1f))
                     }
                     if (activeSeasons.isNotEmpty()) {
-                        Text("CURRENT SEASON", style = MaterialTheme.typography.labelSmall, color = FarmLeaf)
+                        FarmText("CURRENT SEASON", style = MaterialTheme.typography.labelSmall, color = FarmLeaf)
                         activeSeasons.take(2).forEach { season ->
-                            Text(
+                            FarmText(
                                 listOf(season.optString("season_name"), season.optJSONObject("crops")?.optString("name").orEmpty(), season.optJSONObject("fields")?.optString("name").orEmpty())
                                     .filter(String::isNotBlank).joinToString(" · ").ifBlank { "Crop season" },
                                 style = MaterialTheme.typography.bodyMedium,
@@ -219,7 +218,7 @@ internal fun FarmHomeScreen(
                             )
                         }
                     } else if (fields.isEmpty()) {
-                        Text("Add your first field to begin tracking farm work.", style = MaterialTheme.typography.bodySmall, color = FarmLeaf)
+                        FarmText("Add your first field to begin tracking farm work.", style = MaterialTheme.typography.bodySmall, color = FarmLeaf)
                     }
                 }
             }
@@ -279,16 +278,16 @@ internal fun FarmHomeScreen(
 @Composable
 private fun FarmHeroMetric(value: String, label: String, modifier: Modifier = Modifier) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(value, style = MaterialTheme.typography.titleLarge, color = FarmWhite)
-        Text(label, style = MaterialTheme.typography.labelSmall, color = FarmLeaf)
+        FarmText(value, style = MaterialTheme.typography.titleLarge, color = FarmWhite)
+        FarmText(label, style = MaterialTheme.typography.labelSmall, color = FarmLeaf)
     }
 }
 
 @Composable
 internal fun FarmMetricBlock(label: String, value: String, modifier: Modifier = Modifier) {
     Column(modifier = modifier.background(FarmWhite, RoundedCornerShape(12.dp)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
-        Text(value, style = MaterialTheme.typography.titleMedium, color = FarmForest)
+        FarmText(label, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+        FarmText(value, style = MaterialTheme.typography.titleMedium, color = FarmForest)
     }
 }
 
@@ -304,8 +303,8 @@ internal fun FarmRecordsHubScreen(
     LazyColumn(modifier, contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 14.dp, bottom = 90.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Farm records", style = MaterialTheme.typography.headlineMedium, color = FarmForest)
-                Text("Keep each season’s work connected to the right fields and crops.", style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
+                FarmText("Farm records", style = MaterialTheme.typography.headlineMedium, color = FarmForest)
+                FarmText("Keep each season’s work connected to the right fields and crops.", style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
             }
         }
         item {
@@ -314,15 +313,15 @@ internal fun FarmRecordsHubScreen(
                 onValueChange = { query = it },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                label = { Text("Find a record type") },
+                label = { FarmText("Find a record type") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) }
             )
         }
-        item { Text("LAND & SEASONS", style = MaterialTheme.typography.labelMedium, color = FarmGreen, letterSpacing = 1.sp) }
+        item { FarmText("LAND & SEASONS", style = MaterialTheme.typography.labelMedium, color = FarmGreen, letterSpacing = 1.sp) }
         items(visible.filter { it.table in setOf("fields", "crop_seasons", "crops") }) { module ->
             FarmModuleRow(module, records[module.table]?.size, onClick = { onNavigate("module:${module.table}") })
         }
-        item { Text("FARM WORK", style = MaterialTheme.typography.labelMedium, color = FarmGreen, letterSpacing = 1.sp, modifier = Modifier.padding(top = 6.dp)) }
+        item { FarmText("FARM WORK", style = MaterialTheme.typography.labelMedium, color = FarmGreen, letterSpacing = 1.sp, modifier = Modifier.padding(top = 6.dp)) }
         items(visible.filter { it.table !in setOf("fields", "crop_seasons", "crops") }) { module ->
             FarmModuleRow(module, records[module.table]?.size, onClick = { onNavigate("module:${module.table}") })
         }
@@ -342,11 +341,11 @@ private fun FarmModuleRow(module: FarmModule, count: Int?, onClick: () -> Unit) 
             Icon(moduleIcon(module.iconKey), contentDescription = null, tint = FarmForest, modifier = Modifier.padding(10.dp).size(20.dp))
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(module.title, style = MaterialTheme.typography.titleMedium, color = FarmInk)
-            Text(module.description, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+            FarmText(module.title, style = MaterialTheme.typography.titleMedium, color = FarmInk)
+            FarmText(module.description, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
         }
-        count?.let { Text(it.toString(), style = MaterialTheme.typography.labelMedium, color = FarmGreen) }
-        Text("›", style = MaterialTheme.typography.titleLarge, color = FarmMuted)
+        count?.let { FarmText(it.toString(), style = MaterialTheme.typography.labelMedium, color = FarmGreen) }
+        FarmText("›", style = MaterialTheme.typography.titleLarge, color = FarmMuted)
     }
     androidx.compose.material3.Divider(color = FarmLine)
 }
@@ -366,13 +365,13 @@ internal fun FarmReportsScreen(
     val reportYear = report?.year
     LazyColumn(modifier, contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 88.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
-            Text("Reports", style = MaterialTheme.typography.headlineMedium, color = FarmForest)
-            Text("A clear view of the work your family has recorded.", style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
+            FarmText("Reports", style = MaterialTheme.typography.headlineMedium, color = FarmForest)
+            FarmText("A clear view of the work your family has recorded.", style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 ((selectedYear - 1).coerceAtLeast(2000)..selectedYear.coerceAtMost(java.time.Year.now().value)).forEach { year ->
-                    FilterChip(selected = year == (reportYear ?: selectedYear), onClick = { selectedYear = year; onSelectYear(year) }, label = { Text(year.toString()) })
+                    FilterChip(selected = year == (reportYear ?: selectedYear), onClick = { selectedYear = year; onSelectYear(year) }, label = { FarmText(year.toString()) })
                 }
             }
         }
@@ -383,7 +382,7 @@ internal fun FarmReportsScreen(
             else -> {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text("YEARLY SUMMARY · ${report.year}", style = MaterialTheme.typography.labelMedium, color = FarmGreen, letterSpacing = 1.sp)
+                        FarmText("YEARLY SUMMARY · ${report.year}", style = MaterialTheme.typography.labelMedium, color = FarmGreen, letterSpacing = 1.sp)
                         FarmMetricBlock("Sales recorded", report.revenue?.let { "${family.currency} ${farmNumber(it)}" } ?: "Totals can’t be combined safely", Modifier.fillMaxWidth())
                         FarmMetricBlock("Expenses recorded", report.cost?.let { "${family.currency} ${farmNumber(it)}" } ?: "Totals can’t be combined safely", Modifier.fillMaxWidth())
                         FarmMetricBlock("Profit", report.profit?.let { "${family.currency} ${farmNumber(it)}" } ?: "Not available until costs and revenue are marked complete", Modifier.fillMaxWidth())
@@ -404,7 +403,7 @@ internal fun FarmReportsScreen(
             }
         }
         item {
-            Text("EXPLORE REPORTS", style = MaterialTheme.typography.labelMedium, color = FarmGreen, letterSpacing = 1.sp)
+            FarmText("EXPLORE REPORTS", style = MaterialTheme.typography.labelMedium, color = FarmGreen, letterSpacing = 1.sp)
         }
         items(listOf("expenses" to "Expense analysis", "sales" to "Sales analysis", "harvest" to "Harvest analysis", "fields" to "Field performance", "crops" to "Crop performance", "historical_prices" to "Historical prices")) { (key, label) ->
             FarmUtilityRow(label, "Family records · $reportYear", moduleIcon(key)) { onNavigate("report:$key") }
@@ -416,8 +415,8 @@ internal fun FarmReportsScreen(
 private fun FarmReportBar(label: String, amount: Double?, maximum: Double, currency: String) {
     Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
-            Text(amount?.let { "$currency ${farmNumber(it)}" } ?: "Not available", style = MaterialTheme.typography.labelMedium, color = FarmForest)
+            FarmText(label, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+            FarmText(amount?.let { "$currency ${farmNumber(it)}" } ?: "Not available", style = MaterialTheme.typography.labelMedium, color = FarmForest)
         }
         LinearProgressIndicator(
             progress = { (amount?.div(maximum)?.toFloat()?.coerceIn(0f, 1f) ?: 0f) },
@@ -444,8 +443,8 @@ internal fun FarmAiScreen(
             Surface(shape = RoundedCornerShape(16.dp), color = FarmForest, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = FarmSun, modifier = Modifier.size(26.dp))
-                    Text("Ask about your farm", style = MaterialTheme.typography.headlineSmall, color = FarmWhite)
-                    Text("Answers use your family’s saved records and approved reports.", style = MaterialTheme.typography.bodySmall, color = FarmLeaf)
+                    FarmText("Ask about your farm", style = MaterialTheme.typography.headlineSmall, color = FarmWhite)
+                    FarmText("Answers use your family’s saved records and approved reports.", style = MaterialTheme.typography.bodySmall, color = FarmLeaf)
                 }
             }
         }
@@ -454,8 +453,8 @@ internal fun FarmAiScreen(
                 value = question,
                 onValueChange = { question = it; validation = null },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("What would you like to know?") },
-                placeholder = { Text("For example: summarize this year’s expenses") },
+                label = { FarmText("What would you like to know?") },
+                placeholder = { FarmText("For example: summarize this year’s expenses") },
                 minLines = 3,
                 maxLines = 5,
                 enabled = !loading
@@ -473,7 +472,7 @@ internal fun FarmAiScreen(
                 if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = FarmWhite)
                 else Icon(Icons.Default.AutoAwesome, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text(if (loading) "Checking family records…" else "Ask Farm AI")
+                FarmText(if (loading) "Checking family records…" else "Ask Farm AI")
             }
         }
         (validation ?: error)?.let { item { FarmNotice(it, isError = validation != null || error != null) } }
@@ -483,8 +482,8 @@ internal fun FarmAiScreen(
                     FarmSectionTitle("ANSWER", "${answer.records} supporting records")
                     Surface(shape = RoundedCornerShape(12.dp), color = FarmWhite, modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            Text(answer.explanation, style = MaterialTheme.typography.bodyMedium, color = FarmInk)
-                            Text("Based on your family’s authorized farm data.", style = MaterialTheme.typography.labelMedium, color = FarmGreen)
+                            FarmText(answer.explanation, style = MaterialTheme.typography.bodyMedium, color = FarmInk)
+                            FarmText("Based on your family’s authorized farm data.", style = MaterialTheme.typography.labelMedium, color = FarmGreen)
                         }
                     }
                 }
@@ -499,36 +498,36 @@ internal fun FarmMoreScreen(
     modifier: Modifier,
     family: FamilyMembership,
     session: AuthSession?,
-    awadhi: Boolean,
+    hindi: Boolean,
     onNavigate: (String) -> Unit
 ) {
     LazyColumn(modifier, contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 90.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         item {
-            Text(farmLabel("More", awadhi), style = MaterialTheme.typography.headlineMedium, color = FarmForest)
-            Text(farmLabel("Family workspace and account", awadhi), style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
+            FarmText(farmLabel("More", hindi), style = MaterialTheme.typography.headlineMedium, color = FarmForest)
+            FarmText(farmLabel("Family workspace and account", hindi), style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
         }
         item {
             Surface(shape = RoundedCornerShape(12.dp), color = FarmLeaf, modifier = Modifier.fillMaxWidth().clickable { onNavigate("family") }) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                    Text(family.name, style = MaterialTheme.typography.titleMedium, color = FarmForest)
-                    Text("${family.role} · ${family.currency}", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
-                    Text("${session?.displayName.orEmpty().ifBlank { session?.email.orEmpty() }} · View family", style = MaterialTheme.typography.bodySmall, color = FarmInk)
+                    FarmText(family.name, style = MaterialTheme.typography.titleMedium, color = FarmForest)
+                    FarmText("${family.role} · ${family.currency}", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+                    FarmText("${session?.displayName.orEmpty().ifBlank { session?.email.orEmpty() }} · View family", style = MaterialTheme.typography.bodySmall, color = FarmInk)
                 }
             }
         }
-        item { FarmUtilityRow(farmLabel("Family members", awadhi), farmLabel("Roles and access", awadhi), Icons.Default.Home) { onNavigate("members") } }
-        item { FarmUtilityRow(farmLabel("Family settings", awadhi), farmLabel("Name and workspace details", awadhi), Icons.Default.Home) { onNavigate("family_settings") } }
-        item { FarmUtilityRow(farmLabel("Invitations", awadhi), farmLabel("Invite a family member", awadhi), Icons.Default.Add) { onNavigate("invitations") } }
+        item { FarmUtilityRow(farmLabel("Family members", hindi), farmLabel("Roles and access", hindi), Icons.Default.Home) { onNavigate("members") } }
+        item { FarmUtilityRow(farmLabel("Family settings", hindi), farmLabel("Name and workspace details", hindi), Icons.Default.Home) { onNavigate("family_settings") } }
+        item { FarmUtilityRow(farmLabel("Invitations", hindi), farmLabel("Invite a family member", hindi), Icons.Default.Add) { onNavigate("invitations") } }
         item { FarmUtilityRow("Notifications", "Activity and sync updates", Icons.Default.NotificationsNone) { onNavigate("notifications") } }
-        item { FarmUtilityRow(farmLabel("Recycle bin", awadhi), "Restore deleted records", Icons.Default.FolderOpen) { onNavigate("recycle_bin") } }
-        item { FarmUtilityRow(farmLabel("Backup & restore", awadhi), farmLabel("Export or restore family data", awadhi), Icons.Default.FolderOpen) { onNavigate("backup") } }
-        item { FarmUtilityRow(farmLabel("Profile", awadhi), "Name and account details", Icons.Default.Home) { onNavigate("profile") } }
-        item { FarmUtilityRow(farmLabel("Settings", awadhi), farmLabel("Sync, help, and about", awadhi), Icons.Default.Menu) { onNavigate("settings") } }
+        item { FarmUtilityRow(farmLabel("Recycle bin", hindi), "Restore deleted records", Icons.Default.FolderOpen) { onNavigate("recycle_bin") } }
+        item { FarmUtilityRow(farmLabel("Backup & restore", hindi), farmLabel("Export or restore family data", hindi), Icons.Default.FolderOpen) { onNavigate("backup") } }
+        item { FarmUtilityRow(farmLabel("Profile", hindi), "Name and account details", Icons.Default.Home) { onNavigate("profile") } }
+        item { FarmUtilityRow(farmLabel("Settings", hindi), farmLabel("Sync, help, and about", hindi), Icons.Default.Menu) { onNavigate("settings") } }
         item {
-            Text("Family permissions are enforced by Supabase as well as by the controls shown in the app.", style = MaterialTheme.typography.bodySmall, color = FarmMuted, modifier = Modifier.padding(top = 8.dp))
+            FarmText("Family permissions are enforced by Supabase as well as by the controls shown in the app.", style = MaterialTheme.typography.bodySmall, color = FarmMuted, modifier = Modifier.padding(top = 8.dp))
         }
         item {
-            TextButton(onClick = { onNavigate("signout") }) { Text(farmLabel("Sign out", awadhi)) }
+            TextButton(onClick = { onNavigate("signout") }) { FarmText(farmLabel("Sign out", hindi)) }
         }
     }
 }
@@ -536,9 +535,9 @@ internal fun FarmMoreScreen(
 @Composable
 internal fun FarmSectionTitle(title: String, action: String? = null, onAction: () -> Unit = {}) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = FarmForest)
+        FarmText(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = FarmForest)
         if (action != null) TextButton(onClick = onAction, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)) {
-            Text(action, style = MaterialTheme.typography.labelMedium)
+            FarmText(action, style = MaterialTheme.typography.labelMedium)
         }
     }
 }
@@ -547,10 +546,10 @@ internal fun FarmSectionTitle(title: String, action: String? = null, onAction: (
 internal fun FarmRecordListRow(title: String, subtitle: String, status: String = "SYNCED", onClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable(onClick = onClick).padding(vertical = 12.dp, horizontal = 2.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = FarmInk)
+            FarmText(title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, color = FarmInk)
             FarmSyncPill(status)
         }
-        if (subtitle.isNotBlank()) Text(subtitle, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+        if (subtitle.isNotBlank()) FarmText(subtitle, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
         androidx.compose.material3.Divider(color = FarmLine)
     }
 }
@@ -571,7 +570,7 @@ internal fun FarmSyncPill(status: String) {
         else -> "Synced"
     }
     Surface(shape = CircleShape, color = color) {
-        Text(label, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = if (status.uppercase() in setOf("FAILED", "CONFLICT")) FarmError else FarmForest)
+        FarmText(label, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = if (status.uppercase() in setOf("FAILED", "CONFLICT")) FarmError else FarmForest)
     }
 }
 
@@ -579,14 +578,14 @@ internal fun FarmSyncPill(status: String) {
 internal fun FarmLoadingRow(message: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 18.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
         CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = FarmGreen)
-        Text(message, style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
+        FarmText(message, style = MaterialTheme.typography.bodyMedium, color = FarmMuted)
     }
 }
 
 @Composable
 internal fun FarmInlineNote(message: String) {
     Surface(shape = RoundedCornerShape(10.dp), color = FarmLeaf, modifier = Modifier.fillMaxWidth()) {
-        Text(message, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall, color = FarmForest)
+        FarmText(message, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodySmall, color = FarmForest)
     }
 }
 
@@ -594,8 +593,8 @@ internal fun FarmInlineNote(message: String) {
 internal fun FarmInlineErrorCard(message: String, onRetry: () -> Unit) {
     Surface(shape = RoundedCornerShape(10.dp), color = FarmErrorSurface, modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-            Text(message, style = MaterialTheme.typography.bodySmall, color = FarmError)
-            TextButton(onClick = onRetry, contentPadding = PaddingValues(0.dp)) { Text("Try again") }
+            FarmText(message, style = MaterialTheme.typography.bodySmall, color = FarmError)
+            TextButton(onClick = onRetry, contentPadding = PaddingValues(0.dp)) { FarmText("Try again") }
         }
     }
 }
@@ -604,9 +603,9 @@ internal fun FarmInlineErrorCard(message: String, onRetry: () -> Unit) {
 internal fun FarmEmptyState(title: String, description: String, action: String?, onAction: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(vertical = 26.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Surface(shape = CircleShape, color = FarmLeaf) { Icon(Icons.Default.FolderOpen, null, tint = FarmForest, modifier = Modifier.padding(13.dp).size(22.dp)) }
-        Text(title, style = MaterialTheme.typography.titleMedium, color = FarmForest)
-        Text(description, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
-        action?.let { Button(onClick = onAction) { Text(it) } }
+        FarmText(title, style = MaterialTheme.typography.titleMedium, color = FarmForest)
+        FarmText(description, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+        action?.let { Button(onClick = onAction) { FarmText(it) } }
     }
 }
 
@@ -619,10 +618,10 @@ internal fun FarmUtilityRow(title: String, subtitle: String, icon: androidx.comp
     ) {
         Icon(icon, contentDescription = null, tint = FarmGreen, modifier = Modifier.size(21.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(title, style = MaterialTheme.typography.titleMedium, color = FarmInk)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+            FarmText(title, style = MaterialTheme.typography.titleMedium, color = FarmInk)
+            FarmText(subtitle, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
         }
-        Text("›", style = MaterialTheme.typography.titleLarge, color = FarmMuted)
+        FarmText("›", style = MaterialTheme.typography.titleLarge, color = FarmMuted)
     }
 }
 
@@ -634,10 +633,10 @@ private fun FarmWeatherRow(weather: JSONObject) {
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Default.WbSunny, null, tint = FarmSun, modifier = Modifier.size(28.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                Text(loc?.optString("name").orEmpty().ifBlank { "Farm location" }, style = MaterialTheme.typography.titleMedium, color = FarmForest)
-                Text(condition?.optString("description").orEmpty().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+                FarmText(loc?.optString("name").orEmpty().ifBlank { "Farm location" }, style = MaterialTheme.typography.titleMedium, color = FarmForest)
+                FarmText(condition?.optString("description").orEmpty().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
             }
-            Text(weather.opt("temperature_c")?.takeUnless { it == JSONObject.NULL }?.let { "${farmNumber(it.toString().toDoubleOrNull() ?: 0.0)}°" } ?: "—", style = MaterialTheme.typography.headlineSmall, color = FarmForest)
+            FarmText(weather.opt("temperature_c")?.takeUnless { it == JSONObject.NULL }?.let { "${farmNumber(it.toString().toDoubleOrNull() ?: 0.0)}°" } ?: "—", style = MaterialTheme.typography.headlineSmall, color = FarmForest)
         }
     }
 }

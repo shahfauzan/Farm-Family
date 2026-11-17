@@ -54,11 +54,13 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
     private val _state = androidx.compose.runtime.mutableStateOf(FarmUiState())
     private val preferences = application.getSharedPreferences("farm_family_preferences", Context.MODE_PRIVATE)
     val darkMode = androidx.compose.runtime.mutableStateOf(preferences.getBoolean("dark_mode", false))
-    val awadhiLanguage = androidx.compose.runtime.mutableStateOf(preferences.getBoolean("awadhi_language", false))
+    val hindiLanguage = androidx.compose.runtime.mutableStateOf(
+        preferences.getBoolean("hindi_language", preferences.getBoolean("awadhi_language", false))
+    )
     val state: androidx.compose.runtime.State<FarmUiState> = _state
 
     fun setDarkMode(enabled: Boolean) { darkMode.value = enabled; preferences.edit().putBoolean("dark_mode", enabled).apply() }
-    fun setAwadhiLanguage(enabled: Boolean) { awadhiLanguage.value = enabled; preferences.edit().putBoolean("awadhi_language", enabled).apply() }
+    fun setHindiLanguage(enabled: Boolean) { hindiLanguage.value = enabled; preferences.edit().putBoolean("hindi_language", enabled).apply() }
     private var started = false
     private var pendingSyncJob: Job? = null
     private val connectivityManager = application.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
