@@ -37,6 +37,10 @@ val releaseSigningConfigured = listOf(
 val releaseBuildRequested = gradle.startParameter.taskNames.any {
     it.substringAfterLast(':').contains("Release", ignoreCase = true)
 }
+val appVersionName = providers.environmentVariable("FARM_FAMILY_VERSION_NAME")
+    .orElse(providers.gradleProperty("FARM_FAMILY_VERSION_NAME"))
+    .orElse("1.0.2")
+    .get()
 
 if (releaseBuildRequested && !releaseSigningConfigured) {
     throw GradleException("Release signing is not configured. Set the FARM_FAMILY_RELEASE_* environment variables.")
@@ -50,8 +54,8 @@ android {
         applicationId = "com.farmfamily.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = appVersionName
         buildConfigField("String", "SUPABASE_URL", buildConfigValue(supabaseUrl))
         buildConfigField("String", "SUPABASE_ANON_KEY", buildConfigValue(supabaseAnonKey))
     }
