@@ -188,23 +188,27 @@ jobs:
         working-directory: backend
         run: npx --no-install supabase db push --linked --yes
 
-      - name: Deploy Supabase Edge Functions
-        working-directory: backend
-        run: npx --no-install supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF"
-
       - name: Sync model and weather credentials to Supabase
         working-directory: backend
         shell: bash
         run: |
-          if [[ -z "$OPENAI_API_KEY" || -z "$OPENWEATHER_API_KEY" ]]; then
-            echo "::warning::Set OPENAI_API_KEY and OPENWEATHER_API_KEY in the production environment to enable AI and weather."
-            exit 0
+          secret_args=()
+          if [[ -n "$OPENAI_API_KEY" ]]; then
+            secret_args+=("OPENAI_API_KEY=$OPENAI_API_KEY")
+            secret_args+=("OPENAI_MODEL=${OPENAI_MODEL:-gpt-4.1-mini}")
           fi
-          npx --no-install supabase secrets set \
-            "OPENAI_API_KEY=$OPENAI_API_KEY" \
-            "OPENWEATHER_API_KEY=$OPENWEATHER_API_KEY" \
-            "OPENAI_MODEL=${OPENAI_MODEL:-gpt-4.1-mini}" \
-            --remote "$SUPABASE_PROJECT_REF"
+          if [[ -n "$OPENWEATHER_API_KEY" ]]; then
+            secret_args+=("OPENWEATHER_API_KEY=$OPENWEATHER_API_KEY")
+          fi
+          if (( ${#secret_args[@]} )); then
+            npx --no-install supabase secrets set "${secret_args[@]}" --remote="$SUPABASE_PROJECT_REF" --yes
+          else
+            echo "::warning::No OpenAI or OpenWeather key is configured."
+          fi
+
+      - name: Deploy Supabase Edge Functions
+        working-directory: backend
+        run: npx --no-install supabase functions deploy --project-ref "$SUPABASE_PROJECT_REF" --yes
 
       - name: Create GitHub Release
         env:
