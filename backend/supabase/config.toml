@@ -19,6 +19,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.family-backups]
+static_files = ["./functions/family-backups/farm-family-mark.png"]
 verify_jwt = true
 
 [functions.family-imports]

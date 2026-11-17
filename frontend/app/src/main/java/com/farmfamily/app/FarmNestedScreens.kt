@@ -32,6 +32,13 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material3.Icon
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.rememberDatePickerState
@@ -566,7 +573,7 @@ private fun FarmSettingsScreen(modifier: Modifier, vm: FarmFamilyViewModel, sign
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { FarmText(farmLabel("Dark theme", vm.hindiLanguage.value), color = FarmInk); androidx.compose.material3.Switch(checked = vm.darkMode.value, onCheckedChange = vm::setDarkMode) } }
         item { Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { FarmText(farmLabel("Hindi language", vm.hindiLanguage.value), color = FarmInk); androidx.compose.material3.Switch(checked = vm.hindiLanguage.value, onCheckedChange = vm::setHindiLanguage) } }
         item { FarmText("FARM FAMILY · Version ${BuildConfig.VERSION_NAME}", color = FarmMuted) }
-        item { TextButton(onClick = onContact) { FarmText("Contact me") } }
+        item { TextButton(onClick = onContact) { FarmText("About") } }
         item { TextButton(onClick = signOut) { FarmText(farmLabel("Sign out", vm.hindiLanguage.value)) } }
     }
 }
@@ -584,12 +591,19 @@ private fun FarmContactScreen(modifier: Modifier) {
         }
     }
     LazyColumn(modifier, contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { FarmText("Contact me", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
-        item { FarmText("Choose a platform to open my profile or message me.", color = FarmMuted) }
-        item { Button(onClick = { openLink("https://www.instagram.com/fauzan_the_fear/") }, modifier = Modifier.fillMaxWidth()) { FarmText("Instagram") } }
-        item { Button(onClick = { openLink("https://wa.me/9779704201062") }, modifier = Modifier.fillMaxWidth()) { FarmText("WhatsApp") } }
-        item { Button(onClick = { openLink("https://www.tiktok.com/@fauzan_shah.official") }, modifier = Modifier.fillMaxWidth()) { FarmText("TikTok") } }
-        item { Button(onClick = { openLink("mailto:farmfamily928@gmail.com") }, modifier = Modifier.fillMaxWidth()) { FarmText("Email: farmfamily928@gmail.com") } }
+        item { FarmText("About FARM FAMILY", style = MaterialTheme.typography.headlineSmall, color = FarmForest) }
+        item { FarmText("FARM FAMILY helps farming families keep fields, crop seasons, expenses, harvests, sales, and reports together.", color = FarmMuted) }
+        item { FarmSectionTitle("APP DETAILS") }
+        item { FarmText("Version ${BuildConfig.VERSION_NAME}", color = FarmInk) }
+        item { FarmSectionTitle("DEVELOPER") }
+        item { FarmText("Fauzan Ahmad Shah", style = MaterialTheme.typography.titleMedium, color = FarmForest) }
+        item { FarmText("Contact the developer using one of these options.", color = FarmMuted) }
+        item { FarmSectionTitle("CONTACT") }
+        item { Button(onClick = { openLink("https://www.instagram.com/fauzan_the_fear/") }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.CameraAlt, contentDescription = null); Spacer(Modifier.size(8.dp)); FarmText("Instagram") } }
+        item { Button(onClick = { openLink("https://wa.me/9779704201062") }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Chat, contentDescription = null); Spacer(Modifier.size(8.dp)); FarmText("WhatsApp") } }
+        item { Button(onClick = { openLink("https://www.tiktok.com/@fauzan_shah.official") }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.MusicNote, contentDescription = null); Spacer(Modifier.size(8.dp)); FarmText("TikTok") } }
+        item { Button(onClick = { openLink("mailto:farmfamily928@gmail.com") }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Email, contentDescription = null); Spacer(Modifier.size(8.dp)); FarmText("Email: farmfamily928@gmail.com") } }
+        item { Button(onClick = { openLink("https://fauzan-ahmad-shah-portfolio.netlify.app/") }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Language, contentDescription = null); Spacer(Modifier.size(8.dp)); FarmText("Developer portfolio") } }
         error?.let { item { FarmNotice(it, true) } }
     }
 }

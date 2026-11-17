@@ -13,6 +13,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,8 +42,13 @@ import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.AcUnit
+import androidx.compose.material.icons.filled.Air
+import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.NotificationsNone
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Umbrella
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -74,6 +80,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -222,6 +229,9 @@ internal fun FarmHomeScreen(
     modifier: Modifier,
     family: FamilyMembership,
     userName: String,
+    avatarUrl: String?,
+    hasAvatar: Boolean,
+    onLoadAvatar: () -> Unit,
     fields: List<JSONObject>,
     seasons: List<JSONObject>,
     report: YearFarmReport?,
@@ -233,6 +243,14 @@ internal fun FarmHomeScreen(
     onNavigate: (String) -> Unit
 ) {
     val context = LocalContext.current
+    LaunchedEffect(family.id, hasAvatar, avatarUrl) {
+        if (hasAvatar && avatarUrl == null) onLoadAvatar()
+    }
+    val avatarBitmap by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null, avatarUrl) {
+        value = avatarUrl?.let { signedUrl -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching { java.net.URL(signedUrl).openStream().use { android.graphics.BitmapFactory.decodeStream(it) } }.getOrNull()
+        } }
+    }
     var deviceLatitude by rememberSaveable(family.id) { mutableStateOf<Double?>(null) }
     var deviceLongitude by rememberSaveable(family.id) { mutableStateOf<Double?>(null) }
     val locationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
@@ -287,8 +305,13 @@ internal fun FarmHomeScreen(
                         FarmText(family.name, style = MaterialTheme.typography.headlineMedium, color = FarmWhite, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, maxLines = 1)
                             FarmText("${family.role.lowercase().replaceFirstChar { it.uppercase() }} · ${family.currency}", style = MaterialTheme.typography.bodySmall, color = FarmLeaf)
                         }
-                        Surface(shape = CircleShape, color = FarmWhite.copy(alpha = 0.13f)) {
-                            Icon(Icons.Default.Home, contentDescription = "Family farm", tint = FarmWhite, modifier = Modifier.padding(10.dp).size(22.dp))
+                        if (avatarBitmap != null) {
+                            Image(avatarBitmap!!.asImageBitmap(), contentDescription = "Profile picture", contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                                modifier = Modifier.size(46.dp).clip(CircleShape).clickable { onNavigate("profile") })
+                        } else {
+                            Surface(shape = CircleShape, color = FarmWhite.copy(alpha = 0.13f), modifier = Modifier.clickable { onNavigate("profile") }) {
+                                Icon(Icons.Default.Home, contentDescription = "Family farm", tint = FarmWhite, modifier = Modifier.padding(10.dp).size(22.dp))
+                            }
                         }
                     }
                     androidx.compose.material3.Divider(color = FarmWhite.copy(alpha = .18f))
@@ -517,9 +540,13 @@ private fun FarmReportBar(label: String, amount: Double?, maximum: Double, curre
 internal fun FarmAiScreen(
     modifier: Modifier,
     answer: FarmAiAnswer?,
+    expenseDraft: AiExpenseDraft?,
+    expenseMessage: String?,
     loading: Boolean,
     error: String?,
-    onAsk: (String) -> Unit
+    onAsk: (String) -> Unit,
+    onConfirmExpense: () -> Unit,
+    onCancelExpense: () -> Unit
 ) {
     var question by rememberSaveable { mutableStateOf("") }
     var validation by rememberSaveable { mutableStateOf<String?>(null) }
@@ -561,6 +588,22 @@ internal fun FarmAiScreen(
             }
         }
         (validation ?: error)?.let { item { FarmNotice(it, isError = validation != null || error != null) } }
+        expenseMessage?.let { item { FarmNotice(it) } }
+        expenseDraft?.let { draft ->
+            item {
+                Surface(shape = RoundedCornerShape(12.dp), color = FarmLeaf, modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+                        FarmText("Review expense before saving", style = MaterialTheme.typography.titleMedium, color = FarmForest)
+                        FarmText("${draft.description} · NPR ${farmNumber(draft.amount)} · ${draft.date}", color = FarmInk)
+                        FarmText("AI will create this expense only after you confirm. It cannot delete records.", style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = onConfirmExpense) { FarmText("Save expense") }
+                            TextButton(onClick = onCancelExpense) { FarmText("Cancel") }
+                        }
+                    }
+                }
+            }
+        }
         if (answer != null) {
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -574,7 +617,7 @@ internal fun FarmAiScreen(
                 }
             }
         }
-        item { FarmInlineNote("Farm AI is read-only. It cannot make or change records.") }
+        item { FarmInlineNote("Ask questions about saved records, or request an expense draft. Expenses are saved only after you confirm; AI cannot delete records.") }
     }
 }
 
@@ -714,12 +757,38 @@ internal fun FarmUtilityRow(title: String, subtitle: String, icon: androidx.comp
 private fun FarmWeatherRow(weather: JSONObject) {
     val loc = weather.optJSONObject("location")
     val condition = weather.optJSONObject("condition")
-    Surface(shape = RoundedCornerShape(12.dp), color = FarmWhite, modifier = Modifier.fillMaxWidth()) {
+    val context = LocalContext.current
+    val city = loc?.optString("name").orEmpty().ifBlank { "Farm location" }
+    val conditionId = condition?.optInt("id", -1) ?: -1
+    val iconCode = condition?.optString("icon").orEmpty()
+    val label = when (conditionId) {
+        in 200..232 -> "Thunderstorm"
+        in 300..599 -> "Rainy"
+        in 600..699 -> "Snowy"
+        in 700..799 -> "Foggy"
+        800 -> if (iconCode.endsWith("n")) "Clear night" else "Sunny"
+        in 801..804 -> "Cloudy"
+        else -> condition?.optString("description").orEmpty().replaceFirstChar { it.uppercase() }.ifBlank { "Weather" }
+    }
+    val weatherIcon = when (conditionId) {
+        in 200..232 -> Icons.Default.FlashOn
+        in 300..599 -> Icons.Default.Umbrella
+        in 600..699 -> Icons.Default.AcUnit
+        in 700..799 -> Icons.Default.Air
+        800 -> if (iconCode.endsWith("n")) Icons.Default.NightsStay else Icons.Default.WbSunny
+        in 801..804 -> Icons.Default.Cloud
+        else -> Icons.Default.Cloud
+    }
+    val weatherTint = if (conditionId == 800 && !iconCode.endsWith("n")) FarmSun else FarmGreen
+    Surface(shape = RoundedCornerShape(12.dp), color = FarmWhite, modifier = Modifier.fillMaxWidth().clickable {
+        val query = android.net.Uri.encode("weather $city")
+        context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.google.com/search?q=$query")))
+    }) {
         Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Default.WbSunny, null, tint = FarmSun, modifier = Modifier.size(28.dp))
+            Icon(weatherIcon, null, tint = weatherTint, modifier = Modifier.size(28.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                FarmText(loc?.optString("name").orEmpty().ifBlank { "Farm location" }, style = MaterialTheme.typography.titleMedium, color = FarmForest)
-                FarmText(condition?.optString("description").orEmpty().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.bodySmall, color = FarmMuted)
+                androidx.compose.material3.Text("Click for weather", style = MaterialTheme.typography.titleMedium, color = FarmForest)
+                FarmText(farmLabel(label, LocalFarmHindi.current), style = MaterialTheme.typography.bodySmall, color = FarmMuted)
             }
             FarmText(weather.opt("temperature_c")?.takeUnless { it == JSONObject.NULL }?.let { "${farmNumber(it.toString().toDoubleOrNull() ?: 0.0)}°" } ?: "—", style = MaterialTheme.typography.headlineSmall, color = FarmForest)
         }

@@ -27,6 +27,8 @@ private val HindiLabels = mapOf(
     "Labor" to "मजदूरी", "Machinery" to "कृषि मशीनरी", "Expenses" to "खर्च", "Harvests" to "फसल की कटाई",
     "Sales" to "बिक्री", "Historical prices" to "पुराने बाज़ार भाव", "Expense categories" to "खर्च की श्रेणियाँ",
     "Settings" to "सेटिंग", "Profile" to "प्रोफ़ाइल", "Family members" to "परिवार के सदस्य",
+    "Weather" to "मौसम", "Sunny" to "धूप", "Clear night" to "साफ़ रात", "Cloudy" to "बादल",
+    "Rainy" to "बारिश", "Snowy" to "बर्फ़", "Foggy" to "कोहरा", "Thunderstorm" to "आंधी-तूफ़ान",
     "Family settings" to "परिवार की सेटिंग", "Invitations" to "निमंत्रण", "Notifications" to "सूचनाएँ",
     "Family settings saved." to "परिवार की सेटिंग सहेजी गई।", "Saving family settings…" to "परिवार की सेटिंग सहेजी जा रही है…",
     "Default field area unit" to "खेत के रकबे की सामान्य इकाई", "Choose a supported area unit." to "रकबे की दी गई इकाइयों में से चुनें।",

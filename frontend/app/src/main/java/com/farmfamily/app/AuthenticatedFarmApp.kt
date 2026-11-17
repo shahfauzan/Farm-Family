@@ -44,6 +44,9 @@ private fun FarmFamilyAppContent(
     onCallbackHandled: () -> Unit
 ) {
     val state = viewModel.state.value
+    LaunchedEffect(state.authSession?.avatarPath) {
+        if (state.authSession?.avatarPath != null) viewModel.loadAvatar()
+    }
     LaunchedEffect(viewModel) {
         while (true) {
             if (viewModel.isAutoNightModeEnabled()) {
@@ -205,6 +208,9 @@ internal fun FarmWorkspaceScreen(viewModel: FarmFamilyViewModel, state: FarmUiSt
                     modifier = contentModifier,
                     family = family,
                     userName = state.authSession?.displayName.orEmpty().ifBlank { state.authSession?.email?.substringBefore('@').orEmpty() },
+                    avatarUrl = state.avatarUrl,
+                    hasAvatar = state.authSession?.avatarPath != null,
+                    onLoadAvatar = viewModel::loadAvatar,
                     fields = state.records["fields"].orEmpty(),
                     seasons = state.records["crop_seasons"].orEmpty(),
                     report = state.yearReport,
@@ -236,9 +242,13 @@ internal fun FarmWorkspaceScreen(viewModel: FarmFamilyViewModel, state: FarmUiSt
                 FarmTab.AI -> FarmAiScreen(
                     modifier = contentModifier,
                     answer = state.aiAnswer,
+                    expenseDraft = state.aiExpenseDraft,
+                    expenseMessage = state.messages["expenses"],
                     loading = "ai" in state.loading,
-                    error = state.errors["ai"],
-                    onAsk = viewModel::askAi
+                    error = state.errors["ai"] ?: state.errors["expenses"],
+                    onAsk = viewModel::askAi,
+                    onConfirmExpense = viewModel::confirmAiExpense,
+                    onCancelExpense = viewModel::cancelAiExpense
                 )
                 FarmTab.MORE -> FarmMoreScreen(
                     modifier = contentModifier,
@@ -281,6 +291,7 @@ internal fun farmRouteTitle(route: String): String {
         "recycle_bin" -> "Recycle bin"
         "profile" -> "Profile"
         "settings" -> "Settings"
+        "contact" -> "About"
         "family_settings" -> "Family settings"
         "quick_add" -> "Add a farm record"
         else -> parts.firstOrNull()?.replaceFirstChar { it.uppercase() }.orEmpty()

@@ -33,6 +33,7 @@ internal data class FarmUiState(
     val messages: Map<String, String> = emptyMap(),
     val yearReport: YearFarmReport? = null,
     val aiAnswer: FarmAiAnswer? = null,
+    val aiExpenseDraft: AiExpenseDraft? = null,
     val weather: JSONObject? = null,
     val members: List<FamilyMemberRecord>? = null,
     val invitations: List<FamilyInvitationRecord>? = null,
@@ -47,6 +48,8 @@ internal data class FarmUiState(
     val avatarUrl: String? = null,
     val searchResults: List<JSONObject>? = null
 )
+
+internal data class AiExpenseDraft(val description: String, val amount: Double, val date: String)
 
 internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(application) {
     private val auth = SupabaseAuthRepository(application)
@@ -357,9 +360,26 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
     }
 
     fun askAi(question: String) {
+        val writingIntent = Regex("(?i)\\b(add|create|record|log|save|enter|track|jodo|darj)\\b").containsMatchIn(question) || Regex("दर्ज|जोड़|लिख").containsMatchIn(question)
+        val expenseIntent = Regex("(?i)\\b(expense|expenses|cost|kharch|kharcha)\\b|खर्च|व्यय|लागत").containsMatchIn(question)
+        if (writingIntent && expenseIntent) {
+            val amountMatch = Regex("(?i)(?:npr|rs\\.?|रु\\.?\\s*)?\\s*([0-9][0-9,]*(?:\\.[0-9]+)?)").findAll(question).lastOrNull()
+            val amount = amountMatch?.groupValues?.getOrNull(1)?.replace(",", "")?.toDoubleOrNull()
+            val description = question
+                .replace(Regex("(?i)\\b(add|create|record|log|save|enter|track|expense|expenses|cost|costs|kharch|kharcha|npr|rs\\.?|for|on|of)\\b"), " ")
+                .replace(Regex("\\b[0-9][0-9,]*(?:\\.[0-9]+)?\\b"), " ")
+                .replace(Regex("[\\s,.:;%-]+"), " ").trim().take(200)
+            if (amount == null || amount < 0 || description.length < 2) {
+                update { it.copy(aiExpenseDraft = null, errors = it.errors + ("ai" to "To draft an expense, include its name and amount, for example: Add expense seeds NPR 500.")) }
+                return
+            }
+            val date = Regex("\\b\\d{4}-\\d{2}-\\d{2}\\b").find(question)?.value ?: java.time.LocalDate.now().toString()
+            update { it.copy(aiExpenseDraft = AiExpenseDraft(description, amount, date), aiAnswer = null, errors = it.errors - "ai", messages = it.messages - "expenses") }
+            return
+        }
         val family = _state.value.family ?: return
         val session = _state.value.authSession ?: return
-        update { it.copy(loading = it.loading + "ai", errors = it.errors - "ai", aiAnswer = null) }
+        update { it.copy(loading = it.loading + "ai", errors = it.errors - "ai", aiAnswer = null, aiExpenseDraft = null) }
         viewModelScope.launch {
             try {
                 val answer = withContext(Dispatchers.IO) { farm.askFarmAi(session.accessToken, family.id, question) }
@@ -369,6 +389,18 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
             }
         }
     }
+
+    fun confirmAiExpense() {
+        val draft = _state.value.aiExpenseDraft ?: return
+        update { it.copy(aiExpenseDraft = null) }
+        createRecord("expenses", JSONObject()
+            .put("description", draft.description)
+            .put("expense_date", draft.date)
+            .put("amount", draft.amount)
+            .put("currency", "NPR"))
+    }
+
+    fun cancelAiExpense() { update { it.copy(aiExpenseDraft = null) } }
 
     fun search(query: String) {
         if (query.trim().length < 2 || query.length > 160) {
