@@ -97,7 +97,7 @@ jobs:
             secret_args+=("OPENWEATHER_API_KEY=$OPENWEATHER_API_KEY")
           fi
           if (( ${#secret_args[@]} )); then
-            npx --no-install supabase secrets set "${secret_args[@]}" --remote "$SUPABASE_PROJECT_REF"
+            npx --no-install supabase secrets set "${secret_args[@]}" --remote="$SUPABASE_PROJECT_REF"
           else
             echo "::warning::No OpenAI or OpenWeather key was configured; provider-dependent features may be unavailable."
           fi
