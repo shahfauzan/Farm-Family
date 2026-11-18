@@ -15,7 +15,7 @@ Auth uses Supabase email/password only. Configure production redirect URLs, conf
 
 ## Current scope
 
-Included: profiles, families/memberships, one-time hashed invitations and revocation, owner-only member RPCs, farm/crop/input/finance/production tables, RLS, cross-family relationship checks, audit capture, notifications, server-controlled sync metadata, atomic version-checked updates, soft delete/restore, reports, private CSV/XLSX/PDF/ZIP backup export, transactional ZIP import, rate-limited AI analysis, and authenticated OpenWeather current/forecast access.
+Included: profiles, families/memberships, one-time hashed eight-digit invitation codes and QR links that expire after one minute, invitation revocation and code-attempt throttling, owner-only member RPCs, farm/crop/input/finance/production tables, RLS, cross-family relationship checks, audit capture, notifications, server-controlled sync metadata, atomic version-checked updates, soft delete/restore, reports, private CSV/XLSX/PDF/ZIP backup export, transactional ZIP import, rate-limited AI analysis, and authenticated OpenWeather current/forecast access.
 
 The sibling `../frontend` provides authenticated family setup, member and invitation management, online CRUD across farm modules, reports, read-only AI, weather, notifications, profile/settings, backups, and import preview/confirmation. Offline create queues are implemented; offline edits/deletes and background synchronization remain incomplete. The hosted project has live tables and Edge Functions, but its migration history does not record repository migrations 001–005. Reconcile that history before automated production releases. See [security testing](docs/SECURITY_TESTING.md) for local-stack and deployed-project checks still required.
 

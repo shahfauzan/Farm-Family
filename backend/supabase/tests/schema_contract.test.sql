@@ -1,8 +1,10 @@
 begin;
-select plan(22);
+select plan(25);
 select has_table('public','families','families table exists');
 select has_table('public','family_members','membership table exists');
 select has_table('public','family_invitations','invitation table exists');
+select has_column('public','family_invitations','qr_expires_at','QR invitations have a separate expiry');
+select has_table('public','invitation_code_attempts','invitation code attempts are rate limited');
 select has_table('public','crop_seasons','seasons are separate from fields');
 select has_table('public','historical_prices','historical prices are independent records');
 select has_table('public','audit_logs','audit log exists');
@@ -18,6 +20,7 @@ select ok((select relrowsecurity from pg_class where oid='public.family_members'
 select ok((select relrowsecurity from pg_class where oid='public.backup_records'::regclass),'RLS is enabled on backups');
 select ok((select relrowsecurity from pg_class where oid='public.notifications'::regclass),'RLS is enabled on notifications');
 select ok((select relrowsecurity from pg_class where oid='public.weather_request_log'::regclass),'RLS is enabled on weather quota log');
+select ok((select relrowsecurity from pg_class where oid='public.invitation_code_attempts'::regclass),'RLS is enabled on invitation code attempts');
 select ok(not exists(select 1 from pg_policies where schemaname='public' and tablename='audit_logs' and cmd in ('INSERT','ALL')),'no client write policy exists for audit logs');
 select ok(not exists(select 1 from pg_policies where schemaname='public' and tablename='fields' and cmd='UPDATE'),'direct record update policy is absent');
 select ok(not exists(select 1 from pg_policies where schemaname='public' and tablename='fields' and cmd='DELETE'),'direct hard-delete policy is absent');

@@ -33,6 +33,10 @@ The frontend follows the FARM FAMILY product contract: family-scoped farm operat
 - More
   - Family members, notifications, settings, profile, security, sign out
   - Backend operation: membership queries and auth/session teardown
+- Invitations
+  - Owners can share an eight-digit code or a locally generated QR link
+  - QR links expire after one minute; the code follows the invitation's configured expiry
+  - Joining still uses the existing authenticated account and membership flow
 
 ## Local-first architecture
 

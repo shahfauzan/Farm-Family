@@ -7,8 +7,8 @@ Use Supabase Auth email/password only. The auth trigger creates `profiles`; clie
 ## Family lifecycle
 
 - `rpc('create_family', { p_name, p_currency })` atomically creates a family and its OWNER membership. Default currency is NPR.
-- `rpc('create_family_invitation', { p_family, p_role, p_valid_for })` is OWNER-only and returns `{ invitation_id, token, expires_at }`. Show/share the token as a one-time link or QR payload; only SHA-256 is stored. The caller must protect the returned bearer token.
-- `POST /functions/v1/accept-invitation` with `{ "token": "..." }` and a user JWT accepts once and returns `{ "family_id": "uuid" }`.
+- `rpc('create_family_invitation', { p_family, p_role, p_valid_for })` is OWNER-only and returns `{ invitation_id, token, code, qr_expires_at, expires_at }`. The eight-digit code is valid until `expires_at`; the QR link carries the separate bearer token and stops working at `qr_expires_at` (one minute after creation). Only hashes are stored. Code attempts are limited to five per authenticated user per minute.
+- `POST /functions/v1/accept-invitation` with `{ "token": "<8-digit-code-or-QR-token>" }` and a user JWT accepts once and returns `{ "family_id": "uuid" }`. QR links continue to use the app's `farmfamily://invite?token=...` deep link.
 - OWNER administers memberships with `set_family_member(p_family,p_user,p_role,p_can_view,p_can_add,p_can_edit,p_can_delete)`, `remove_family_member(p_family,p_user)`, and `restore_family_member(p_family,p_user)`. `revoke_family_invitation(p_invitation)` revokes a pending invite. These actions are owner-checked and audit logged.
 
 ## Family data and sync

@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -53,14 +54,19 @@ import androidx.compose.runtime.setValue
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.size
+import kotlinx.coroutines.delay
 import org.json.JSONObject
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
+import com.google.zxing.WriterException
 
 @Composable
 internal fun FarmNestedRoute(
@@ -398,24 +404,60 @@ private fun FarmInvitationsScreen(modifier: Modifier, state: FarmUiState, vm: Fa
                 .appendQueryParameter("token", invitation.token)
                 .build()
                 .toString()
+            var currentTime by remember(invitation.id) { mutableStateOf(System.currentTimeMillis()) }
+            LaunchedEffect(invitation.id) {
+                while (true) {
+                    currentTime = System.currentTimeMillis()
+                    delay(1_000)
+                }
+            }
+            val secondsLeft = ((Instant.parse(invitation.qrExpiresAt).toEpochMilli() - currentTime + 999) / 1_000)
+                .toInt()
+                .coerceIn(0, 60)
+            val qrBitmap = remember(invitationLink, secondsLeft > 0) {
+                if (secondsLeft > 0) createInvitationQrBitmap(invitationLink) else null
+            }
             Column(Modifier.fillMaxWidth().background(FarmLeaf).padding(12.dp)) {
-                FarmText("Shareable invitation link", color = FarmForest)
-                FarmText(invitationLink, color = FarmInk)
-                FarmText("Expires ${invitation.expiresAt}", color = FarmMuted)
-                Row {
-                    TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(invitationLink)) }) { FarmText("Copy link") }
+                FarmText("QR code", color = FarmForest)
+                if (secondsLeft > 0 && qrBitmap != null) {
+                    Image(
+                        bitmap = qrBitmap.asImageBitmap(),
+                        contentDescription = "Family invitation QR code",
+                        modifier = Modifier.size(220.dp).align(Alignment.CenterHorizontally)
+                    )
+                    FarmText(
+                        "QR expires in ${secondsLeft / 60}:${(secondsLeft % 60).toString().padStart(2, '0')}",
+                        color = FarmMuted
+                    )
+                } else if (secondsLeft > 0) {
+                    FarmNotice("The QR code could not be generated. Share the 8-digit code instead.", true)
+                } else {
+                    FarmNotice("This QR code has expired. Create a new invitation to share another QR code.", true)
+                }
+                FarmText("8-digit invitation code", color = FarmForest)
+                FarmText(invitation.code, style = MaterialTheme.typography.headlineMedium, color = FarmInk)
+                FarmText("The code expires ${invitation.expiresAt}.", color = FarmMuted)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(invitation.code)) }) { FarmText("Copy code") }
+                    TextButton(onClick = {
+                        val share = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
+                            .putExtra(android.content.Intent.EXTRA_TEXT, "Join my FARM FAMILY family with invitation code ${invitation.code}. It expires ${invitation.expiresAt}.")
+                        context.startActivity(android.content.Intent.createChooser(share, "Share invitation code"))
+                    }) { FarmText("Share code") }
+                }
+                if (secondsLeft > 0) Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    TextButton(onClick = { clipboard.setText(androidx.compose.ui.text.AnnotatedString(invitationLink)) }) { FarmText("Copy QR link") }
                     TextButton(onClick = {
                         val share = android.content.Intent(android.content.Intent.ACTION_SEND).setType("text/plain")
                             .putExtra(
                                 android.content.Intent.EXTRA_TEXT,
-                                "Join my FARM FAMILY family by opening this link on Android: $invitationLink\n" +
-                                    "Sign in or create an account and you will join automatically. No owner approval is needed. " +
-                                    "This invitation expires ${invitation.expiresAt}."
+                                "Join my FARM FAMILY family by scanning this QR invitation or opening this link: $invitationLink\n" +
+                                    "The QR link expires in one minute. You can also enter code ${invitation.code}, which expires ${invitation.expiresAt}."
                             )
-                        context.startActivity(android.content.Intent.createChooser(share, "Share family invitation"))
-                    }) { FarmText("Share link") }
+                        context.startActivity(android.content.Intent.createChooser(share, "Share family QR invitation"))
+                    }) { FarmText("Share QR link") }
                 }
-                FarmText("Anyone with this link can join using its invitation role until it expires or is revoked. Share it only with the intended person.", color = FarmMuted, style = MaterialTheme.typography.bodySmall)
+                FarmText("The QR link stops working after one minute. The 8-digit code stays valid until it expires or is revoked. Share either only with the intended family member.", color = FarmMuted, style = MaterialTheme.typography.bodySmall)
             }
         } }
         state.errors["invitations"]?.let { item { FarmNotice(it, true) } }
@@ -426,6 +468,21 @@ private fun FarmInvitationsScreen(modifier: Modifier, state: FarmUiState, vm: Fa
                 if (state.family?.role == "OWNER" && invite.status == "PENDING") TextButton(onClick = { vm.revokeInvitation(invite.id) }) { FarmText("Revoke invitation") }
             }
         }
+    }
+}
+
+private fun createInvitationQrBitmap(content: String): android.graphics.Bitmap? {
+    return try {
+        val matrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, 512, 512)
+        android.graphics.Bitmap.createBitmap(matrix.width, matrix.height, android.graphics.Bitmap.Config.ARGB_8888).also { bitmap ->
+            for (x in 0 until matrix.width) {
+                for (y in 0 until matrix.height) {
+                    bitmap.setPixel(x, y, if (matrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                }
+            }
+        }
+    } catch (_: WriterException) {
+        null
     }
 }
 

@@ -255,14 +255,21 @@ internal fun FarmFamilySetupScreen(
             TextButton(onClick = { joining = true; validation = null }) { FarmText("Join a family") }
         }
         if (joining) {
-            OutlinedTextField(invitation, { invitation = it; validation = null }, label = { FarmText("Invitation link or code") }, enabled = !loading, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(
+                invitation,
+                { value -> if (value.length <= 8 && value.all { it in '0'..'9' }) invitation = value; validation = null },
+                label = { FarmText("8-digit invitation code") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                enabled = !loading,
+                modifier = Modifier.fillMaxWidth()
+            )
         } else {
             OutlinedTextField(familyName, { familyName = it; validation = null }, label = { FarmText("Family name") }, enabled = !loading, modifier = Modifier.fillMaxWidth())
         }
         (validation ?: error)?.let { FarmNotice(it, isError = true) }
         Button(onClick = {
             validation = when {
-                joining && invitation.trim().isBlank() -> "Enter the invitation code you received."
+                joining && !Regex("[0-9]{8}").matches(invitation.trim()) -> "Enter the 8-digit invitation code you received."
                 !joining && familyName.trim().isBlank() -> "Enter a name for your family."
                 familyName.trim().length > 160 -> "Family name must be 160 characters or fewer."
                 else -> null

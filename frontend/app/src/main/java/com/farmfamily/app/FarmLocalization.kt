@@ -71,8 +71,14 @@ private val HindiLabels = mapOf(
     "Your name" to "आपका नाम", "Save account" to "खाता सहेजें", "Choose profile picture" to "प्रोफ़ाइल फ़ोटो चुनें",
     "Change profile picture" to "प्रोफ़ाइल फ़ोटो बदलें", "Remove picture" to "फ़ोटो हटाएँ", "Profile picture" to "प्रोफ़ाइल फ़ोटो",
     "Create invitation" to "निमंत्रण बनाएँ", "Invite a family member" to "परिवार के सदस्य को बुलाएँ", "Copy link" to "लिंक कॉपी करें",
-    "Share link" to "लिंक साझा करें", "Share family invitation" to "परिवार का निमंत्रण साझा करें", "Invitation link or code" to "निमंत्रण लिंक या कोड",
-    "Shareable invitation link" to "साझा करने योग्य निमंत्रण लिंक", "Revoke invitation" to "निमंत्रण रद्द करें",
+    "Share link" to "लिंक साझा करें", "Share family invitation" to "परिवार का निमंत्रण साझा करें",
+    "8-digit invitation code" to "8 अंकों का निमंत्रण कोड", "QR code" to "QR कोड",
+    "Copy code" to "कोड कॉपी करें", "Share code" to "कोड साझा करें", "Copy QR link" to "QR लिंक कॉपी करें",
+    "Share QR link" to "QR लिंक साझा करें", "Revoke invitation" to "निमंत्रण रद्द करें",
+    "Enter the 8-digit invitation code you received." to "मिला हुआ 8 अंकों का निमंत्रण कोड लिखें।",
+    "The QR code could not be generated. Share the 8-digit code instead." to "QR कोड नहीं बन सका। इसके बजाय 8 अंकों का कोड साझा करें।",
+    "This QR code has expired. Create a new invitation to share another QR code." to "यह QR कोड समाप्त हो गया है। नया QR कोड साझा करने के लिए नया निमंत्रण बनाएँ।",
+    "The QR link stops working after one minute. The 8-digit code stays valid until it expires or is revoked. Share either only with the intended family member." to "QR लिंक एक मिनट बाद काम नहीं करेगा। 8 अंकों का कोड समाप्त या रद्द होने तक मान्य रहेगा। इन्हें केवल परिवार के सही सदस्य के साथ साझा करें।",
     "Family invitation ready. Sign in or create an account and you will join automatically. No owner approval is needed." to "परिवार का निमंत्रण तैयार है। साइन इन करें या खाता बनाएँ; आप अपने आप जुड़ जाएँगे। परिवार मालिक की मंज़ूरी की ज़रूरत नहीं है।",
     "This invitation link is not valid. Ask the family owner for a new link." to "यह निमंत्रण लिंक मान्य नहीं है। परिवार मालिक से नया लिंक माँगें।",
     "Could not join this family" to "परिवार से नहीं जुड़ सके", "Try invitation again" to "निमंत्रण फिर आज़माएँ",
@@ -235,6 +241,8 @@ internal fun translateFarmText(text: String, hindi: Boolean): String {
         text.startsWith("Profit · ") -> "मुनाफ़ा · " + text.removePrefix("Profit · ")
         text.startsWith("YEARLY SUMMARY · ") -> "साल का सार · " + text.removePrefix("YEARLY SUMMARY · ")
         text.startsWith("You opened version ") -> "आपने संस्करण " + text.removePrefix("You opened version ")
+        text.startsWith("QR expires in ") -> "QR की समय-सीमा: " + text.removePrefix("QR expires in ")
+        text.startsWith("The code expires ") -> "कोड समाप्त होगा: " + text.removePrefix("The code expires ")
         text.startsWith("Invitation code: ") -> "निमंत्रण कोड: " + text.removePrefix("Invitation code: ")
         text.startsWith("Latest saved values: ") -> "दूसरे डिवाइस पर सहेजी जानकारी: " + text.removePrefix("Latest saved values: ")
         text.startsWith("Expires ") -> "समाप्ति: " + text.removePrefix("Expires ")

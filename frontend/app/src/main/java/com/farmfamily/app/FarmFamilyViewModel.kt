@@ -272,8 +272,9 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
         val inviteToken = if (value.startsWith("farmfamily://", ignoreCase = true)) {
             runCatching { Uri.parse(value).getQueryParameter("token") }.getOrNull()
         } else value
-        if (inviteToken.isNullOrBlank() || !INVITATION_TOKEN_PATTERN.matches(inviteToken)) {
-            update { it.copy(familyError = "Enter a valid invitation link or code.") }
+        if (inviteToken.isNullOrBlank() ||
+            !(INVITATION_CODE_PATTERN.matches(inviteToken) || INVITATION_TOKEN_PATTERN.matches(inviteToken))) {
+            update { it.copy(familyError = "Enter a valid 8-digit invitation code.") }
             return
         }
         preferences.edit().putString("pending_invitation_token", inviteToken).apply()
@@ -679,6 +680,7 @@ internal class FarmFamilyViewModel(application: Application) : AndroidViewModel(
     }
 
     private companion object {
+        val INVITATION_CODE_PATTERN = Regex("[0-9]{8}")
         val INVITATION_TOKEN_PATTERN = Regex("[a-fA-F0-9]{64}")
     }
 }

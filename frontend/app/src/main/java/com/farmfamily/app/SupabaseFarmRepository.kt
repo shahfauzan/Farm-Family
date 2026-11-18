@@ -82,7 +82,13 @@ data class FamilyInvitationRecord(
     val expiresAt: String
 )
 
-data class CreatedInvitation(val id: String, val token: String, val expiresAt: String)
+data class CreatedInvitation(
+    val id: String,
+    val token: String,
+    val code: String,
+    val qrExpiresAt: String,
+    val expiresAt: String
+)
 
 class SupabaseFarmRepository(context: android.content.Context) {
     private val baseUrl = BuildConfig.SUPABASE_URL.trimEnd('/')
@@ -312,7 +318,13 @@ class SupabaseFarmRepository(context: android.content.Context) {
             JSONObject().put("p_family", familyId).put("p_role", role).put("p_valid_for", "${days} days")
         ))
         val row = rows.optJSONObject(0) ?: throw IOException("The invitation response was incomplete.")
-        return CreatedInvitation(row.getString("invitation_id"), row.getString("token"), row.getString("expires_at"))
+        return CreatedInvitation(
+            row.getString("invitation_id"),
+            row.getString("token"),
+            row.getString("code"),
+            row.getString("qr_expires_at"),
+            row.getString("expires_at")
+        )
     }
 
     fun revokeInvitation(accessToken: String, invitationId: String) {

@@ -23,7 +23,7 @@ try {
     create function extensions.digest(text,text) returns bytea language sql immutable as $$ select public.digest($1,$2) $$;
     create function extensions.gen_random_bytes(integer) returns bytea language sql volatile as $$ select public.gen_random_bytes($1) $$;
   `);
-  for (const name of ['202611140001_farm_family.sql','202611140002_secure_operations.sql','202611140004_unit_safe_harvest_reports.sql','202611140005_finance_currency_validation.sql','20261117032903_family_member_roster.sql','20261117072159_harden_security_definer_privileges.sql','20261117073707_restore_weather_quota_schema.sql','20261117084500_family_area_preferences.sql','20261117090000_reload_postgrest_schema.sql','20261117100000_seed_expense_categories.sql','20261117110000_fix_family_link_category_id_trigger.sql','20261117120000_fix_invitation_crypto_search_path.sql']) {
+  for (const name of ['202611140001_farm_family.sql','202611140002_secure_operations.sql','202611140004_unit_safe_harvest_reports.sql','202611140005_finance_currency_validation.sql','20261117032903_family_member_roster.sql','20261117072159_harden_security_definer_privileges.sql','20261117073707_restore_weather_quota_schema.sql','20261117084500_family_area_preferences.sql','20261117090000_reload_postgrest_schema.sql','20261117100000_seed_expense_categories.sql','20261117110000_fix_family_link_category_id_trigger.sql','20261117120000_fix_invitation_crypto_search_path.sql','20261118100000_qr_and_code_invitations.sql']) {
     const source = await Deno.readTextFile(`supabase/migrations/${name}`);
     const sql = source.replace(/^create extension if not exists pgcrypto;\s*/m, '-- pgcrypto stubbed for embedded migration syntax validation.\n');
     await db.exec(sql);
@@ -44,7 +44,8 @@ try {
   console.log('PASS SECURITY DEFINER RPC grants');
   const a='11111111-1111-4111-8111-111111111111';
   const b='22222222-2222-4222-8222-222222222222';
-  await db.exec(`insert into auth.users(id) values ('${a}'),('${b}'); grant usage on schema auth to authenticated; grant execute on function auth.uid() to authenticated; grant usage on schema storage to authenticated; grant all on all tables in schema public to authenticated; grant usage,select on all sequences in schema public to authenticated; grant select on storage.objects to authenticated;`);
+  const c='33333333-3333-4333-8333-333333333333';
+  await db.exec(`insert into auth.users(id) values ('${a}'),('${b}'),('${c}'); grant usage on schema auth to authenticated; grant execute on function auth.uid() to authenticated; grant usage on schema storage to authenticated; grant all on all tables in schema public to authenticated; grant usage,select on all sequences in schema public to authenticated; grant select on storage.objects to authenticated;`);
   const actor=async(id:string)=>q(`select set_config('request.jwt.claim.sub',$1,false)`,[id]);
   const expectReject=async(label:string,fn:()=>Promise<unknown>)=>{let rejected=false;try{await fn()}catch{rejected=true}if(!rejected)throw new Error(`Expected rejection: ${label}`);console.log(`PASS ${label}`)};
   await actor(a); await db.exec('set role authenticated');
@@ -126,10 +127,37 @@ try {
   if(conflict.status!=='CONFLICT'||conflict.actual_version!==2)throw new Error('Stale write was not detected');
   console.log('PASS stale version returns conflict and keeps server data');
   const invitation=(await q(`select * from public.create_family_invitation($1,'VIEWER',interval '1 day')`,[familyA])).rows[0];
+  if(!/^[0-9]{8}$/.test(invitation.code))throw new Error('Invitation code must contain exactly 8 digits');
+  const qrWindow=(await q(`select qr_expires_at>now() and qr_expires_at<=now()+interval '61 seconds' valid from public.family_invitations where id=$1`,[invitation.invitation_id])).rows[0].valid;
+  if(!qrWindow)throw new Error('QR invitation must expire within one minute');
+  console.log('PASS invitation returns an 8-digit code and a one-minute QR expiry');
   await db.exec('reset role'); await actor(b); await db.exec('set role authenticated');
   const joined=(await q(`select public.accept_family_invitation($1) family_id`,[invitation.token])).rows[0].family_id;
   if(joined!==familyA)throw new Error('Invitation acceptance failed');
   await expectReject('invitation replay is rejected',()=>q(`select public.accept_family_invitation($1)`,[invitation.token]));
+  await db.exec('reset role'); await actor(a); await db.exec('set role authenticated');
+  const codeInvitation=(await q(`select * from public.create_family_invitation($1,'EDITOR',interval '1 day')`,[familyA])).rows[0];
+  await db.exec('reset role');
+  let invalidCode='00000000';
+  while((await q(`select exists(select 1 from public.family_invitations where invite_code_hash=extensions.digest($1,'sha256')) exists`,[invalidCode])).rows[0].exists) {
+    invalidCode=String(Number(invalidCode)+1).padStart(8,'0');
+  }
+  await actor(c); await db.exec('set role authenticated');
+  for(let i=0;i<5;i++){
+    const invalid=(await q(`select public.accept_family_invitation($1) family_id`,[invalidCode])).rows[0].family_id;
+    if(invalid!==null)throw new Error('An invalid invitation code was accepted');
+  }
+  const rateLimited=(await q(`select public.accept_family_invitation($1) family_id`,[codeInvitation.code])).rows[0].family_id;
+  if(rateLimited!==null)throw new Error('Sixth invitation-code attempt was not rate limited');
+  await db.exec('reset role');
+  await q(`update public.invitation_code_attempts set window_started_at=now()-interval '2 minutes' where user_id=$1`,[c]);
+  await actor(c); await db.exec('set role authenticated');
+  const joinedByCode=(await q(`select public.accept_family_invitation($1) family_id`,[codeInvitation.code])).rows[0].family_id;
+  if(joinedByCode!==familyA)throw new Error('Eight-digit invitation code acceptance failed');
+  const codeReplay=(await q(`select public.accept_family_invitation($1) family_id`,[codeInvitation.code])).rows[0].family_id;
+  if(codeReplay!==null)throw new Error('A used invitation code was accepted again');
+  console.log('PASS invitation code acceptance, replay protection, and attempt throttling');
+  await actor(b);
   await expectReject('viewer cannot escalate own role',()=>q(`select public.set_family_member($1,$2,'OWNER',true,true,true,true)`,[familyA,b]));
   await expectReject('invalid invitation token is rejected',()=>q(`select public.accept_family_invitation('ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')`));
   await db.exec('reset role');
@@ -137,11 +165,16 @@ try {
   const revoked=(await q(`select * from public.create_family_invitation($1,'EDITOR',interval '1 day')`,[familyA])).rows[0];
   await q(`select public.revoke_family_invitation($1)`,[revoked.invitation_id]);
   const expired=(await q(`select * from public.create_family_invitation($1,'EDITOR',interval '1 day')`,[familyA])).rows[0];
+  const expiredQr=(await q(`select * from public.create_family_invitation($1,'EDITOR',interval '1 day')`,[familyA])).rows[0];
   await db.exec('reset role');
   await q(`update public.family_invitations set created_at=now()-interval '2 days',expires_at=now()-interval '1 day' where id=$1`,[expired.invitation_id]);
+  await q(`update public.family_invitations set qr_expires_at=now()-interval '1 second' where id=$1`,[expiredQr.invitation_id]);
   await actor(b); await db.exec('set role authenticated');
   await expectReject('revoked invitation is rejected',()=>q(`select public.accept_family_invitation($1)`,[revoked.token]));
   await expectReject('expired invitation is rejected',()=>q(`select public.accept_family_invitation($1)`,[expired.token]));
+  await expectReject('expired QR invitation is rejected',()=>q(`select public.accept_family_invitation($1)`,[expiredQr.token]));
+  const expiredCode=(await q(`select public.accept_family_invitation($1) family_id`,[expired.code])).rows[0].family_id;
+  if(expiredCode!==null)throw new Error('An expired invitation code was accepted');
   await expectReject('non-owner cannot create invitation',()=>q(`select * from public.create_family_invitation($1,'EDITOR',interval '1 day')`,[familyA]));
   await db.exec('reset role');
   await actor(a); await db.exec('set role authenticated');
